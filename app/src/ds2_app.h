@@ -7,6 +7,7 @@
 #include <rex/platform.h>
 #if REX_PLATFORM_IOS
 #include "ds2_ios/ios_paths.h"
+#include "ds2_ios/ios_log_overlay.h"
 #endif
 #include <rex/logging.h>
 #include <rex/rex_app.h>
@@ -62,6 +63,12 @@ class Ds2App : public rex::ReXApp {
   // Without a GPU plugin the runtime drops the game's graphics ("no GPU emulation loaded"); default to xenos
   // unless the command line or ds2.toml chose otherwise.
   void OnPostInitLogging() override {
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    // Capture every log line for the on-device overlay (3 taps top-center)
+    // and Documents/ds2_log.txt. Must run after logging init, otherwise
+    // InitLogging() wipes g_extra_sinks.
+    ds2_ios::InstallLogSink();
+#endif
     SetIfDefault("gpu_plugin", "xenos");
 #if defined(__SWITCH__)
     // Switch defaults proven on the console (docs/handoff/11-switch-level-load-diag.md, tests 20-21):

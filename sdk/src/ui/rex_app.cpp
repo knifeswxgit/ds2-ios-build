@@ -23,6 +23,9 @@
 #include <rex/filesystem.h>
 #include <rex/logging/sink.h>
 #include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
 #include <rex/ui/overlay/achievement_toast.h>
 #include <rex/ui/overlay/achievements_overlay.h>
 #include <rex/ui/overlay/console_overlay.h>
@@ -187,7 +190,13 @@ bool ReXApp::SetupEnvironment() {
                                         log_level_str, category_levels);
   if (log_file_cvar.empty()) {
     log_config.app_name = std::string(GetName());
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    // The .app bundle is read-only on iOS: rotating logs go to Documents,
+    // where the runtime can actually create them.
+    log_config.log_dir = (ds2_ios::DocumentsPath() / "logs").string();
+#else
     log_config.log_dir = (exe_dir / "logs").string();
+#endif
   }
 
   rex::InitLogging(log_config);

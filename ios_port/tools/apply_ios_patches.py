@@ -579,6 +579,60 @@ hunk("app/src/ds2_app.h",
 """, "ds2_app.h: accept compressed shader pack", 'spvz.replace_extension(".spvz")')
 
 
+# --- ds2_app.h: log overlay sink + writable log dir on iOS -----------------
+hunk("app/src/ds2_app.h",
+"""#include "ds2_ios/ios_paths.h"
+#endif
+""",
+"""#include "ds2_ios/ios_paths.h"
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+""", "ds2_app.h: log overlay include", '#include "ds2_ios/ios_log_overlay.h"')
+
+hunk("app/src/ds2_app.h",
+"""  void OnPostInitLogging() override {
+    SetIfDefault("gpu_plugin", "xenos");
+""",
+"""  void OnPostInitLogging() override {
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    // Capture every log line for the on-device overlay (3 taps top-center)
+    // and Documents/ds2_log.txt. Must run after logging init, otherwise
+    // InitLogging() wipes g_extra_sinks.
+    ds2_ios::InstallLogSink();
+#endif
+    SetIfDefault("gpu_plugin", "xenos");
+""", "ds2_app.h: install log overlay sink", "ds2_ios::InstallLogSink()")
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""#include <rex/logging.h>
+#include <rex/ui/overlay/achievement_toast.h>
+""",
+"""#include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
+#include <rex/ui/overlay/achievement_toast.h>
+""", "rex_app: iOS log path include", 'ds2_ios/ios_paths.h"')
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""  if (log_file_cvar.empty()) {
+    log_config.app_name = std::string(GetName());
+    log_config.log_dir = (exe_dir / "logs").string();
+  }
+""",
+"""  if (log_file_cvar.empty()) {
+    log_config.app_name = std::string(GetName());
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    // The .app bundle is read-only on iOS: rotating logs go to Documents,
+    // where the runtime can actually create them.
+    log_config.log_dir = (ds2_ios::DocumentsPath() / "logs").string();
+#else
+    log_config.log_dir = (exe_dir / "logs").string();
+#endif
+  }
+""", "rex_app: rotating logs into Documents on iOS",
+     "rotating logs go to Documents")
+
 # --- ds2_app.h: the shader pack lives in Documents, not the .app bundle ----
 # spirv_library.cpp resolves a RELATIVE cvar against GetExecutableFolder()
 # (the .app bundle). ResolveShaderLibrary() checks Documents, so it must hand
@@ -722,6 +776,16 @@ hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
 #if REX_PLATFORM_WIN32
 """, "windowed_app_main_sdl: SDL3 iOS entry point",
      "SDL3-iOS owns UIApplicationMain")
+
+
+hunk("app/CMakeLists.txt",
+"""        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_paths.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_touch_input_driver.cpp")
+""",
+"""        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_paths.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_log_overlay.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_touch_input_driver.cpp")
+""", "app cmake: compile the log overlay", 'ios_log_overlay.mm')
 
 
 def main():

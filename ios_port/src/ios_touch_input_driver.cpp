@@ -15,6 +15,7 @@
 #include <rex/logging.h>
 
 #include "ds2_ios/ios_paths.h"
+#include "ds2_ios/ios_log_overlay.h"
 
 namespace ds2_ios {
 namespace {
@@ -287,6 +288,7 @@ void IosTouchInputDriver::InstallPlatformHooks() {
   static std::once_flag once;
   std::call_once(once, [] {
     ds2_ios::InstallMemoryWarningHandler();
+    ds2_ios::InstallLogOverlay();  // 3 taps top-center -> log viewer
     dispatch_async(dispatch_get_main_queue(), ^{
       ds2_ios::InstallTouchOverlay();
     });

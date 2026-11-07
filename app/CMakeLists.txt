@@ -74,6 +74,7 @@ target_include_directories(ds2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${DS2_
 if(REXGLUE_PLATFORM_IOS)
     target_sources(ds2 PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_paths.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_log_overlay.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_touch_input_driver.cpp")
     target_include_directories(ds2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/include")
     if(REXGLUE_IOS_SDL3)
