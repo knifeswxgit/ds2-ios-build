@@ -42,6 +42,11 @@ on:
         required: false
         default: false
         type: boolean
+      use_ccache:
+        description: "Compile through ccache (huge speedup; disable only if a build breaks)"
+        required: false
+        default: true
+        type: boolean
 
 # A new push supersedes an older run: never burn macOS minutes on stale builds.
 concurrency:
@@ -245,9 +250,18 @@ jobs:
             ds2-ios-tree-v2-
             ds2-ios-tree-v1-
 
+      - name: Restore ccache
+        id: cache-ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-ios-v1-${{ github.run_id }}
+          restore-keys: |
+            ccache-ios-v1-
+
       - name: Xcode
         run: |
-          brew install cmake ninja python@3.12 || true
+          brew install cmake ninja python@3.12 ccache || true
           sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -showsdks | grep iphoneos
 
@@ -314,7 +328,8 @@ jobs:
             -DREXGLUE_ENABLE_PERF_COUNTERS=OFF \
             -DREXGLUE_ENABLE_TRACY=OFF \
             -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include -I$MOLTENVK_INCLUDE" \
-            -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface"
+            -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface" \
+            ${{ inputs.use_ccache && '-DCMAKE_XCODE_ATTRIBUTE_CC="ccache clang" -DCMAKE_XCODE_ATTRIBUTE_CXX="ccache clang++"' || '' }}
 
       - name: Use cached Xcode project (skip 3-minute reconfigure)
         if: ${{ !inputs.force_configure && steps.cache-ios-tree.outputs.cache-matched-key != '' }}
@@ -354,6 +369,13 @@ jobs:
           path: build/out/ds2
           retention-days: 7
           if-no-files-found: error
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-ios-v1-${{ github.run_id }}
 
       - name: Save iOS Xcode project and objects
         if: always()
