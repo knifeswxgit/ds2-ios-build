@@ -388,10 +388,13 @@ jobs:
         # ResolveShaderLibrary() looks for it there. This keeps the .ipa small
         # and avoids a slow 501 MB upload to GitHub on every run.
         run: |
+          # OnConfigurePaths() looks for "ds2.toml" in the .app bundle, so the
+          # optimized config must carry that exact name inside the .ipa.
+          cp ios_port/out/ds2_ios.toml ds2.toml
           python3 ios_port/tools/mkipa.py \
             --executable "$EXE" \
             --plist ios_port/Info.plist \
-            --resource ios_port/out/ds2_ios.toml \
+            --resource ds2.toml \
             --out ds2-ios.ipa \
             --bundle-id com.yourteam.ds2ios
           python3 ios_port/tools/mkipa.py --verify ds2-ios.ipa

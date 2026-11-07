@@ -114,7 +114,13 @@ class Ds2App : public rex::ReXApp {
     std::filesystem::path wanted(name);
     if (wanted.is_relative()) wanted = dir / wanted;
     if (usable(wanted)) {
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+      // The loader resolves relative names against the .app bundle; on iOS the
+      // compressed pack lives in Documents, so pass an absolute path there.
+      rex::cvar::SetFlagByName("ds2_shader_library", wanted.string());
+#else
       rex::cvar::SetFlagByName("ds2_shader_library", name);
+#endif
       return;
     }
     std::filesystem::path best;
@@ -140,7 +146,11 @@ class Ds2App : public rex::ReXApp {
       REXLOG_WARN("ds2: shader pack {} not found next to the NRO (no ds2_shaders*.spvlib + .idx either)", name);
       return;
     }
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    const std::string found = best.string();
+#else
     const std::string found = best.filename().string();
+#endif
     rex::cvar::SetFlagByName("ds2_shader_library", found);
     REXLOG_INFO("ds2: shader pack {} not found, using {}", name, found);
   }

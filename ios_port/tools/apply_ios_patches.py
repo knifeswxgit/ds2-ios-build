@@ -579,6 +579,42 @@ hunk("app/src/ds2_app.h",
 """, "ds2_app.h: accept compressed shader pack", 'spvz.replace_extension(".spvz")')
 
 
+# --- ds2_app.h: the shader pack lives in Documents, not the .app bundle ----
+# spirv_library.cpp resolves a RELATIVE cvar against GetExecutableFolder()
+# (the .app bundle). ResolveShaderLibrary() checks Documents, so it must hand
+# the loader an absolute path there or the 501 MiB pack is never found.
+hunk("app/src/ds2_app.h",
+"""    if (usable(wanted)) {
+      rex::cvar::SetFlagByName("ds2_shader_library", name);
+      return;
+    }
+""",
+"""    if (usable(wanted)) {
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+      // The loader resolves relative names against the .app bundle; on iOS the
+      // compressed pack lives in Documents, so pass an absolute path there.
+      rex::cvar::SetFlagByName("ds2_shader_library", wanted.string());
+#else
+      rex::cvar::SetFlagByName("ds2_shader_library", name);
+#endif
+      return;
+    }
+""", "ds2_app.h: absolute shader pack path in Documents",
+     "compressed pack lives in Documents")
+
+hunk("app/src/ds2_app.h",
+"""    const std::string found = best.filename().string();
+    rex::cvar::SetFlagByName("ds2_shader_library", found);
+""",
+"""#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    const std::string found = best.string();
+#else
+    const std::string found = best.filename().string();
+#endif
+    rex::cvar::SetFlagByName("ds2_shader_library", found);
+""", "ds2_app.h: versioned shader pack fallback stays absolute",
+     "const std::string found = best.string();")
+
 # --- ds2_watchdog.cpp: glibc mallinfo() does not exist on Darwin -----------
 hunk("app/src/ds2_watchdog.cpp",
 """#include <ctime>
