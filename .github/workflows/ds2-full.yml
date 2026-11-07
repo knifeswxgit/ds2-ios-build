@@ -325,15 +325,25 @@ jobs:
         run: |
           JOBS="$(sysctl -n hw.ncpu)"
           cmake --build out/app-ios --config Release --target ds2 -- -jobs "$JOBS"
-          find out/app-ios -name ds2 -type f -perm -111 -exec ls -la {} \;
+
+      # The Xcode generator honours RUNTIME_OUTPUT_DIRECTORY ($<TARGET_FILE_DIR:
+      # rex::runtime>), so the binary lands in sdk/out/ios-arm64/Release, NOT
+      # under out/app-ios/. Stage it at a single known path for the packer.
+      - name: Stage Mach-O for packaging
+        run: |
+          EXE="$(find "$GITHUB_WORKSPACE" -type f -name ds2 -perm -111 \
+                  -not -path '*/.dSYM/*' | head -1)"
+          test -n "$EXE" || { echo "Mach-O not found"; exit 1; }
+          mkdir -p build/out
+          cp "$EXE" build/out/ds2
+          file build/out/ds2
+          ls -la build/out/ds2
 
       - name: Upload Mach-O
         uses: actions/upload-artifact@v4
         with:
           name: ds2-macho
-          path: |
-            out/app-ios/**/ds2
-            !out/app-ios/**/*.dSYM/**
+          path: build/out/ds2
           retention-days: 7
           if-no-files-found: error
 
