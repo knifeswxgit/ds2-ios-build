@@ -207,6 +207,7 @@ jobs:
           XCFW="$(find /tmp/moltenvk -name MoltenVK.xcframework -maxdepth 6 | head -1)"
           test -n "$XCFW"
           echo "MOLTENVK_XCFW=$XCFW" >> "$GITHUB_ENV"
+          echo "MOLTENVK_INCLUDE=$(dirname "$XCFW")/../include" >> "$GITHUB_ENV"
 
       - name: Configure iOS
         run: |
@@ -219,7 +220,8 @@ jobs:
             -DDS2_PGO=OFF \
             -DREXGLUE_ENABLE_PERF_COUNTERS=OFF \
             -DREXGLUE_ENABLE_TRACY=OFF \
-            -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include"
+            -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include -I$MOLTENVK_INCLUDE" \
+            -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface"
 
       - name: Build Mach-O
         run: |
