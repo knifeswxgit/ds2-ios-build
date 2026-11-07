@@ -75,6 +75,9 @@ ios_port/out/smoke/
 *.p12
 *.mobileprovision
 
+# Upstream line 16 ignores any directory named out/. Re-include ours first,
+# otherwise the file negations below cannot take effect.
+!ios_port/out/
 # Upstream ignores *.txt and assets/; keep the small generated manifests.
 !ios_port/out/ds2_ios.toml
 !ios_port/out/slim_manifest.txt

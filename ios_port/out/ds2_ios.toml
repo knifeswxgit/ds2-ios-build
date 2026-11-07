@@ -1,0 +1,178 @@
+# RC95 = RC94 + game region Europe (DS2 offers Russian only in the European SKU).
+# RC94 = RC93 + diagnostic log lines [lang] and [io] regulation (fonts, texts, save files).
+# RC93 = RC92 + XamGetLanguage fix (the game asks XamGetLanguage, which was a stub -> English). Calibration copy off.
+# RC92 = RC91 for playing: probe off, Russian interface (user_language = 12), Calibration 1.15 copied into the save.
+# RC91 = RC90 + probe mode 3 + ds2_msr_per_thread = true (test P of RC89: main thread lock 14% -> 3.5%).
+# RC90 = RC89 + ds2_native_probe (diagnostic only, picture wrong in every other pair of 10 s intervals).
+# RC75: RC74 + translator fix: texture ExpAdjust read from fetch constant word 3 (was word 4 = LOD bias bits): HDR scene/sky decoded 8x too dark (halo), random scaling of LOD-biased textures. Shader pack rc75.
+log_level = "warn"  # iOS: less log IO on flash
+# Game language: the default of the start screen. 12 Russian, 1 English, 3 German, 4 French, 5 Spanish, 6 Italian, 9 Portuguese, 11 Polish.
+user_language = 12  # iOS: Russian only
+# RC95: XGetGameRegion. 766 = 0x02FE Europe (Russian available), 65535 = 0xFFFF as before (North America: English).
+user_game_region = 766  # iOS: Europe SKU (Russian)
+# RC92: Calibration 1.15 (USER_DATA15 of the release's -GAME_0000 package) copied into the save at start;
+# the save's old file is kept once as USER_DATA15.before_calibration. "" = off.
+ds2_calibration_file = ""
+ds2_watchdog = true
+ds2_switch_saltynx = false  # iOS: no SaltyNX sysmodule
+ds2_mesa_env = ""  # iOS: no Mesa NVK / nouveau on iOS
+nfsmw_io_rangos_mb = 0
+ds2_switch_nvmap_mb = 0  # iOS: no /dev/nvmap
+ds2_watchdog_probe_tables = 0  # iOS: diagnostics off
+ds2_switch_commit_granule_kb = 0  # iOS: no Horizon guest-memory granule
+ds2_switch_stack_sampling = false  # iOS: no Switch profiler
+audio_xma_estado = false
+ds2_func_counts = false  # iOS: no per-function counters
+ds2_func_counts_every_s = 10
+ds2_editor_wait_log = false  # iOS: editor disabled
+ds2_editor_force_free_s = 0  # iOS: editor disabled
+ds2_editor_open_mode = 0  # iOS: editor disabled
+ds2_editor_open_after_s = 0  # iOS: editor disabled
+ds2_msr_per_thread = true
+ds2_fpcr_ftz_fixed = false
+ds2_export_stats = false  # iOS: no periodic stats writes
+
+ds2_switch_cpu_mhz = 0  # iOS: no Horizon clock sysmodule
+ds2_switch_gpu_mhz = 0  # iOS: no Horizon clock sysmodule
+ds2_switch_mem_mhz = 0  # iOS: no Horizon clock sysmodule
+
+ds2_native_renderer = true
+ds2_native_log_every = 0  # iOS: no per-frame native log
+ds2_native_gpu_profile = false  # iOS: no GPU profiler
+ds2_native_hitch_ms = 100
+ds2_native_mips = true
+ds2_native_max_anisotropy = 0
+ds2_native_early_z = true
+ds2_native_async_pipelines = true
+ds2_native_pass_barriers = false
+ds2_native_occlusion_queries = false
+ds2_native_capture_combo = false  # iOS: no L3+R3 capture
+ds2_native_texture_sets = true
+
+# Independent rollback: false, false, ""; restart after each change.
+ds2_native_dynamic_ubo = true
+ds2_native_resolve_image_barriers = true
+ds2_shader_library = "ds2_shaders.spvlib"  # iOS: loader swaps in the .spvz sibling
+# Set 0 to disable sparse shader-group timing.
+ds2_native_shader_profile_every = 0  # iOS: no shader group timing
+
+# false restores RC60 record scanning; requires restart.
+ds2_shader_library_index = true  # iOS: required for compressed pack
+ds2_native_fold_texture_signs = true  # iOS: specialization constants remove fetch branches
+
+# Independent graphics rollback: false; restart after each change.
+ds2_native_resolve_logical_size = true
+ds2_native_resolve_color_convert = true
+
+# Independent RC62 rollback: false, then restart.
+ds2_native_cpu_cache = false
+ds2_native_vertex_inputs = false
+ds2_native_alpha_specialization = true
+
+# RC63, independent, restart after a change:
+# 1D textures (tone curve LUT etc.); false = white as before RC63.
+ds2_native_textures_1d = true
+# Display gamma after the game's ramp: 1.0 = unchanged; 1.2 brightens dark tones.
+ds2_native_present_gamma = 1.0
+
+# RC64, independent, restart after a change:
+# Cube textures (sky, material reflections/ambient); false = white as before RC64.
+ds2_native_textures_cube = true
+# Shaders translated on the console are kept in this file next to the NRO and reused on the next start; "" disables.
+ds2_shader_cache = ""  # iOS: do not grow a second cache on device
+
+# RC65, independent, restart after a change:
+# Depth the game resolved into 8888 (shadow maps, fog/DOF/soft particles) read as depth; false = raw bytes as before.
+ds2_native_depth_from_rgba8 = true
+
+# RC66, independent, restart after a change:
+# true = old D24FS8 depth mapping [0,2)->[0,1) (before RC66: shadows/depth effects read half depth).
+ds2_native_float24_half_range = false
+# Skip GPU barriers with no work since the previous one; false = all barriers as before RC66.
+ds2_native_barrier_elision = true
+# GPU timing on 1 command buffer in N (each timestamp drains the GPU); 1 = every buffer as before RC66.
+ds2_native_gpu_profile_every = 0  # iOS: no GPU profiler
+
+# RC67, independent, restart after a change:
+# Command processor re-check interval for WAIT_REG_MEM, microseconds; 0 = old millisecond sleeps.
+ds2_cp_wait_poll_us = 100
+# Test only: 7e3 render targets as 32-bit B10G11R11 instead of 64-bit RGBA16F (faster smoke/materials, no alpha).
+ds2_native_7e3_as_r11g11b10 = false
+
+# RC68, independent, restart after a change:
+# Clamp shader output of k_2_10_10_10_FLOAT targets to the Xenos range [0, 31.875] (NaN -> 0); false = unclamped as before.
+ds2_native_clamp_7e3 = true
+# Skip draw state calls that repeat the command buffer state; false = all calls as before RC68.
+ds2_native_state_filter = true
+# Depth resolves copy only the depth plane; false = depth + stencil as before RC68.
+ds2_native_resolve_depth_only = true
+
+# RC69, independent, restart after a change:
+# Occlusion query reports "hidden" only after N consecutive zero results (1 = raw results; anti-blink for enemies).
+ds2_native_occlusion_hold = 2
+
+# RC70, independent, restart after a change:
+# Clip 1x resolves to the destination texture size (no extra copies for 320x180 targets); false = as before.
+ds2_native_resolve_clip_to_dest = false
+# During an L3+R3 capture also write every color resolve at its point in the frame (snap_*.ppm + .a.pgm alpha).
+ds2_native_capture_resolves = false  # iOS: no frame dumps
+
+# RC71, independent, restart after a change:
+# 4x MSAA passes (depth/normal pre-pass) drawn into real 4x MSAA images: pixel shaders once per pixel, not per sample.
+ds2_native_msaa_host = false  # iOS: save MSAA bandwidth/RAM on A13
+# A 4x pass starting with a full clear does not import the old contents; false = always import.
+ds2_native_msaa_skip_clear_import = true
+
+# RC72/73, independent, restart after a change:
+# RC72 slope depth bias x2 for 4x targets in sample space: false (reverted in RC74, suspected halo).
+ds2_native_bias_sample_scale = false
+# Shader groups timed per profiled buffer (0 = default limits).
+ds2_native_shader_profile_groups = 0
+
+# RC74, independent, restart after a change:
+# Clear a shadow cube face over its whole viewport after the game's clear rectangles (torch light squares); false = off.
+ds2_native_shadow_face_clear = true
+# RC73 behaviour for lone 4x clears (sample space + replay); false = RC71 behaviour.
+ds2_native_msaa_clear_replay = true
+
+# RC76: absolute Xenos constant depth bias (VK_EXT_depth_bias_control, unorm24 units) and drawn-face polygon offset.
+ds2_native_depth_bias_absolute = true
+# RC76: D24FS8 depth resolves hold float24 depth truncated toward zero, as on the console.
+ds2_native_resolve_float24 = true
+ds2_native_float24_round = false
+# RC77: CPU and hitches.
+ds2_native_persistent_texture_sets = true
+ds2_native_fast_untile = true
+ds2_native_pipeline_steal = true
+# RC78: constant buffers equal to the previous draw's reuse its upload.
+ds2_native_constant_reuse = true
+# RC79: shader pack restores on a worker thread (draws wait for them like for pipelines).
+ds2_native_async_shader_restore = true
+# RC80: texture rows built in cached memory; GPU spike profile after long GPU waits.
+ds2_native_texture_scratch = true
+ds2_native_gpu_spike_ms = 60
+# RC81: plain register writes store directly.
+ds2_native_fast_registers = true
+# RC82: bonfire fog particles at half resolution (empty list = off).
+ds2_native_halfres_ps = "70FC5FED5D6D2178 73889BBD9480721F 69CF96E66B5F2822 7FE96CCABD9DF34E F2DDD0716A037207 50455868F53A23E3:z 6A6C52E883DEE5FA:z DCC487B67A3F44F8:z"
+ds2_native_halfres_vpos_const = 215
+# RC83: bonfire fog brightness when added (1.0 = as the game; 0.75 = 25 % less).
+ds2_native_halfres_strength = 0.75
+# RC84: resolution divisor of the fog (2 = half, 4 = quarter).
+ds2_native_halfres_divisor = 2  # iOS: keep half-res bonfire fog (big GPU win)
+# RC86: textures rewritten by the game (videos) are checked every frame for a while.
+ds2_native_dynamic_textures = true
+# RC90: diagnostic probe. In every other pair of log intervals (~20 s) the picture is wrong on purpose:
+# 1 = game draws with an empty scissor (only vertex work), 2 = only the first triangle of each draw,
+# 3 = game pixel shaders replaced by a constant one (only target writes left). 0 = off.
+ds2_native_probe = 0  # iOS: diagnostic probe off
+
+# ---- iOS / iPhone 11 (A13, 4 GB) ----------------------------------
+# Generated by ios_port/tools/make_ios_config.py. Values below are SDK
+# cvars that the Switch release does not set explicitly.
+ds2_render_scale = 0.75  # 540p from the 720p base; biggest FPS lever on A13
+ds2_fps_cap = 30  # stable 30 fps, less thermal throttling than 60
+ds2_fps_lock_vsync = true  # present on CADisplayLink
+ds2_sharpen = true  # compensate the 0.75 upscale
+ds2_sharpness = 0.45  # mild sharpening, avoid halos
+ds2_resolution_prompt = false  # skip start screen; language fixed to Russian
