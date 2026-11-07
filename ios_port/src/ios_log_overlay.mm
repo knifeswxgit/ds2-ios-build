@@ -190,18 +190,12 @@ void ShowOverlay(UIWindow* window) {
   RefreshText();
   [window addSubview:g_panel];
 
-  __weak UITextView* weak_text = g_text;
   g_timer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer* t) {
     if (!g_visible) {
       [t invalidate];
       return;
     }
-    if (!weak_text) return;
-    std::string joined = JoinLines();
-    NSString* str = [NSString stringWithUTF8String:joined.c_str()];
-    NSRange end = {str.length, 0};
-    [weak_text setText:str];
-    [weak_text scrollRangeToVisible:end];
+    RefreshText();
   }];
   [[NSRunLoop mainRunLoop] addTimer:g_timer forMode:NSRunLoopCommonModes];
 
@@ -249,7 +243,7 @@ void InstallLogSink() {
 
     auto sink = std::make_shared<OverlaySink>();
     sink->set_pattern("[%H:%M:%S.%e] [%l] %v");
-    rex::logging::AddSink(sink);
+    rex::AddSink(sink);
     g_sink_installed = true;
   });
 }
