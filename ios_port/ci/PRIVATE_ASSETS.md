@@ -1,5 +1,18 @@
 # Приватные ассеты для GitHub Actions
 
+## Быстрее: одна команда
+
+Всё, что описано ниже, уже автоматизировано. В обычном `cmd.exe`:
+
+```bat
+gh auth login --web --git-protocol https
+C:\docs\darksouls2\ios_port\ci\launch.bat
+```
+
+Не дописывай ничего после первой строки: `# один раз` в cmd.exe уезжает в аргументы и `gh` падает с `accepts 0 arg(s), received 3`. Подробности — `C:\docs\darksouls2\RUN_ME.txt`.
+
+В Git Bash: `bash ios_port/ci/launch.sh`.
+
 ## Почему это безопасно и дёшево
 
 В CI уезжает **только `Default.xex` (21 МБ)**. Он нужен исключительно для codegen:

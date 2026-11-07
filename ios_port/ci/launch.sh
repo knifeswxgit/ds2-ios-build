@@ -9,7 +9,9 @@
 # shader pack, secrets, workflow run, .ipa download) is done here.
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PROJECT_ROOT="${DS2_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+# When launched from a copy inside ds2-ios-build/, the game files still live
+# in the original project directory; DS2_PROJECT_ROOT overrides it.
 REPO="$PROJECT_ROOT/ds2-ios-build"
 RELEASE_TAG="ds2-private-assets"
 XEX="$PROJECT_ROOT/darksouls_nintendo/DARK SOULS II Scholar of the First Sin (homebrew port) for Nintendo Switch [NSP]/switch/ds2/game_root/Default.xex"
