@@ -370,6 +370,18 @@ hunk("app/src/ds2_app.h",
 """, "ds2_app.h: resolve shader pack from Documents on iOS",
      "The 501 MiB compressed shader pack is copied into Documents")
 
+hunk("sdk/thirdparty/CMakeLists.txt",
+"""    if(APPLE)
+        # Build the loader and MoltenVK revisions shipped by the pinned SDK.
+""",
+"""    if(APPLE AND NOT REXGLUE_PLATFORM_IOS)
+        # iOS: no loader (vulkan-loader CMake is malformed for arm64 non-WIN32)
+        # and no MoltenVK build - REXGLUE_IOS_MOLTENVK links the prebuilt
+        # static libMoltenVK.a from the KhronosGroup release.
+        # Build the loader and MoltenVK revisions shipped by the pinned SDK.
+""", "thirdparty cmake: skip vulkan-loader and moltenvk on iOS",
+     "if(APPLE AND NOT REXGLUE_PLATFORM_IOS)")
+
 # --- let ResolveShaderLibrary() accept the compressed sibling --------------
 hunk("app/src/ds2_app.h",
 """    auto usable = [](const std::filesystem::path& p) {

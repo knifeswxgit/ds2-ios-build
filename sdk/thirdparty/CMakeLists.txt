@@ -205,7 +205,10 @@ if(REXGLUE_USE_VULKAN)
     set(VMA_ENABLE_INSTALL ON CACHE BOOL "" FORCE)
     add_subdirectory(vulkan-memory-allocator)
 
-    if(APPLE)
+    if(APPLE AND NOT REXGLUE_PLATFORM_IOS)
+        # iOS: no loader (vulkan-loader CMake is malformed for arm64 non-WIN32)
+        # and no MoltenVK build - REXGLUE_IOS_MOLTENVK links the prebuilt
+        # static libMoltenVK.a from the KhronosGroup release.
         # Build the loader and MoltenVK revisions shipped by the pinned SDK.
         # They remain runtime-loaded; no Vulkan implementation is linked into
         # rexglue itself.
