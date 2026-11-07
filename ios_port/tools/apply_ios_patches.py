@@ -579,6 +579,43 @@ hunk("app/src/ds2_app.h",
 """, "ds2_app.h: accept compressed shader pack", 'spvz.replace_extension(".spvz")')
 
 
+# --- ds2_watchdog.cpp: glibc mallinfo() does not exist on Darwin -----------
+hunk("app/src/ds2_watchdog.cpp",
+"""#include <ctime>
+#include <malloc.h>
+#include <deque>
+""",
+"""#include <ctime>
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+// Darwin has no glibc mallinfo(). malloc_zone_statistics gives the same two
+// numbers from the default zone (useful for jetsam monitoring on iPhone 11).
+struct Ds2MallocStats {
+  size_t arena;
+  size_t uordblks;
+};
+static Ds2MallocStats Ds2Mallinfo() {
+  Ds2MallocStats s{};
+  malloc_statistics_t st{};
+  malloc_zone_statistics(malloc_default_zone(), &st);
+  s.arena = st.size_allocated;
+  s.uordblks = st.size_in_use;
+  return s;
+}
+#else
+#include <malloc.h>
+using Ds2MallocStats = struct mallinfo;
+static Ds2MallocStats Ds2Mallinfo() { return mallinfo(); }
+#endif
+#include <deque>
+""", "ds2_watchdog: Darwin malloc statistics", "Darwin has no glibc mallinfo()")
+
+hunk("app/src/ds2_watchdog.cpp",
+     "  const struct mallinfo mi = mallinfo();\n",
+     "  const auto mi = Ds2Mallinfo();\n",
+     "ds2_watchdog: use the portable mallinfo shim",
+     "const auto mi = Ds2Mallinfo();", count=2)
+
 # --- single static Mach-O: no embedded dylibs in a sideloaded .ipa --------
 hunk("sdk/src/system/CMakeLists.txt",
 """if(REXGLUE_PLATFORM_SWITCH)

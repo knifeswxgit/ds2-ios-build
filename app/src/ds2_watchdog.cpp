@@ -21,7 +21,27 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+// Darwin has no glibc mallinfo(). malloc_zone_statistics gives the same two
+// numbers from the default zone (useful for jetsam monitoring on iPhone 11).
+struct Ds2MallocStats {
+  size_t arena;
+  size_t uordblks;
+};
+static Ds2MallocStats Ds2Mallinfo() {
+  Ds2MallocStats s{};
+  malloc_statistics_t st{};
+  malloc_zone_statistics(malloc_default_zone(), &st);
+  s.arena = st.size_allocated;
+  s.uordblks = st.size_in_use;
+  return s;
+}
+#else
 #include <malloc.h>
+using Ds2MallocStats = struct mallinfo;
+static Ds2MallocStats Ds2Mallinfo() { return mallinfo(); }
+#endif
 #include <deque>
 #include <filesystem>
 #include <unistd.h>
@@ -193,7 +213,7 @@ void LogHeartbeat(int seconds, size_t threads, size_t files) {
       if (auto* p = cp->active_pixel_shader()) ps = p->ucode_data_hash();
     }
   }
-  const struct mallinfo mi = mallinfo();
+  const auto mi = Ds2Mallinfo();
   const auto k = ds2::platform::QueryKernelStats();
   std::string probe;
   if (const int pp = REXCVAR_GET(ds2_watchdog_probe_pages); pp > 0) {
@@ -247,7 +267,7 @@ constexpr int kStallRepeatSeconds = 15;
 
 void LogMemory(const char* tag) {
   uint64_t used = 0, total = 0;
-  const struct mallinfo mi = mallinfo();
+  const auto mi = Ds2Mallinfo();
   if (ds2::platform::HostMemory(&used, &total)) {
     const auto k = ds2::platform::QueryKernelStats();
     REXLOG_INFO("[ds2 wd] {} memory: host {} / {} MB, malloc arena {} MB in use {} MB, guest backing committed {} MB, "
