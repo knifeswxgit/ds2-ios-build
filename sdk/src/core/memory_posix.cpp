@@ -9,6 +9,8 @@
  * @modified    Tom Clay & Rien Gupta, 2026 - Adapted for ReXGlue runtime (POSIX + macOS)
  */
 
+#include <rex/platform.h>  // before <mach/*>: the iOS branch needs REX_PLATFORM_IOS
+
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
@@ -21,8 +23,14 @@
 
 #if REX_PLATFORM_MAC
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
 #include <mach/vm_region.h>
+#if REX_PLATFORM_IOS
+// iPhoneOS SDK ships mach_vm.h as an #error stub. vm_region_64() from
+// mach/vm_map.h is the 64-bit MIG equivalent on arm64 iOS.
+#include <mach/vm_map.h>
+#else
+#include <mach/mach_vm.h>
+#endif
 #endif  // REX_PLATFORM_MAC
 
 #include <sys/mman.h>
@@ -374,7 +382,7 @@ bool Protect(void* base_address, size_t length, PageAccess access, PageAccess* o
 }
 
 bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out) {
-#if REX_PLATFORM_MAC
+#if REX_PLATFORM_MAC && !REX_PLATFORM_IOS
   mach_vm_address_t address = reinterpret_cast<mach_vm_address_t>(base_address);
   mach_vm_size_t region_size = 0;
   vm_region_basic_info_data_64_t info;
@@ -384,6 +392,19 @@ bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out) {
   kern_return_t kr =
       mach_vm_region(mach_task_self(), &address, &region_size, VM_REGION_BASIC_INFO_64,
                      reinterpret_cast<vm_region_info_t>(&info), &info_count, &object_name);
+#elif REX_PLATFORM_IOS
+  vm_address_t address = reinterpret_cast<vm_address_t>(base_address);
+  vm_size_t region_size = 0;
+  vm_region_basic_info_data_64_t info;
+  mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object_name = MACH_PORT_NULL;
+
+  kern_return_t kr =
+      vm_region_64(mach_task_self(), &address, &region_size, VM_REGION_BASIC_INFO_64,
+                   reinterpret_cast<vm_region_info_t>(&info), &info_count, &object_name);
+#endif
+
+#if REX_PLATFORM_MAC
   if (kr != KERN_SUCCESS) {
     return false;
   }

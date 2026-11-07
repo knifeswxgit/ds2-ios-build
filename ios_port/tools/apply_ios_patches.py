@@ -413,6 +413,84 @@ hunk("sdk/thirdparty/CMakeLists.txt",
 """, "thirdparty cmake: skip vulkan-loader and moltenvk on iOS",
      "if(APPLE AND NOT REXGLUE_PLATFORM_IOS)")
 
+# --- memory_posix.cpp: mach_vm.h is an #error stub in the iPhoneOS SDK -----
+# iOS arm64 still has the 64-bit MIG call vm_region_64() (mach/vm_map.h), so
+# QueryProtect keeps working instead of falling back to kNoAccess, which the
+# MMIO fault handler relies on.
+hunk("sdk/src/core/memory_posix.cpp",
+"""#include <cerrno>
+#include <cstddef>
+""",
+"""#include <rex/platform.h>  // before <mach/*>: the iOS branch needs REX_PLATFORM_IOS
+
+#include <cerrno>
+#include <cstddef>
+""", "memory_posix: define platform macros before mach headers",
+     "before <mach/*>: the iOS branch needs REX_PLATFORM_IOS")
+
+hunk("sdk/src/core/memory_posix.cpp",
+"""#if REX_PLATFORM_MAC
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <mach/vm_region.h>
+#endif  // REX_PLATFORM_MAC
+""",
+"""#if REX_PLATFORM_MAC
+#include <mach/mach.h>
+#include <mach/vm_region.h>
+#if REX_PLATFORM_IOS
+// iPhoneOS SDK ships mach_vm.h as an #error stub. vm_region_64() from
+// mach/vm_map.h is the 64-bit MIG equivalent on arm64 iOS.
+#include <mach/vm_map.h>
+#else
+#include <mach/mach_vm.h>
+#endif
+#endif  // REX_PLATFORM_MAC
+""", "memory_posix: no mach_vm.h on iOS",
+     "iPhoneOS SDK ships mach_vm.h as an #error stub")
+
+hunk("sdk/src/core/memory_posix.cpp",
+"""bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out) {
+#if REX_PLATFORM_MAC
+  mach_vm_address_t address = reinterpret_cast<mach_vm_address_t>(base_address);
+  mach_vm_size_t region_size = 0;
+  vm_region_basic_info_data_64_t info;
+  mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object_name;
+
+  kern_return_t kr =
+      mach_vm_region(mach_task_self(), &address, &region_size, VM_REGION_BASIC_INFO_64,
+                     reinterpret_cast<vm_region_info_t>(&info), &info_count, &object_name);
+  if (kr != KERN_SUCCESS) {
+""",
+"""bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out) {
+#if REX_PLATFORM_MAC && !REX_PLATFORM_IOS
+  mach_vm_address_t address = reinterpret_cast<mach_vm_address_t>(base_address);
+  mach_vm_size_t region_size = 0;
+  vm_region_basic_info_data_64_t info;
+  mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object_name;
+
+  kern_return_t kr =
+      mach_vm_region(mach_task_self(), &address, &region_size, VM_REGION_BASIC_INFO_64,
+                     reinterpret_cast<vm_region_info_t>(&info), &info_count, &object_name);
+#elif REX_PLATFORM_IOS
+  vm_address_t address = reinterpret_cast<vm_address_t>(base_address);
+  vm_size_t region_size = 0;
+  vm_region_basic_info_data_64_t info;
+  mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object_name = MACH_PORT_NULL;
+
+  kern_return_t kr =
+      vm_region_64(mach_task_self(), &address, &region_size, VM_REGION_BASIC_INFO_64,
+                   reinterpret_cast<vm_region_info_t>(&info), &info_count, &object_name);
+#endif
+
+#if REX_PLATFORM_MAC
+  if (kr != KERN_SUCCESS) {
+""", "memory_posix: vm_region_64 fallback for iOS QueryProtect",
+     "vm_region_64(mach_task_self()")
+
 # --- let ResolveShaderLibrary() accept the compressed sibling --------------
 hunk("app/src/ds2_app.h",
 """    auto usable = [](const std::filesystem::path& p) {
