@@ -67,6 +67,20 @@ jobs:
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: python3 tools/fetch_thirdparty.py
 
+      - name: Make SDL3 a real git repo (its CMake calls git_describe)
+        run: |
+          D=sdk/thirdparty/sdl3
+          if [ -f "$D/.git" ]; then
+            rm -f "$D/.git"
+            git -C "$D" init -q
+            git -C "$D" add -A
+            git -C "$D" -c user.name=ci -c user.email=ci@local commit -q -m vendored
+            git -C "$D" tag -f v1.0.0
+            echo "sdl3: real git repo with tag v1.0.0"
+          else
+            echo "sdl3: already a git repo"
+          fi
+
       - name: Fetch Default.xex from a PRIVATE release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
