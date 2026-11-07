@@ -1,0 +1,19 @@
+# Addresses never declared by tools/ds2_find_dataonly_entries.py, one per line with the reason.
+# Found by tools/ds2_find_split_culprits.py after run 10: declaring them split a real function (likely C++ EH
+# catch/unwind funclets referenced from EH tables, which branch back into the parent function).
+0x82A37AE4  # run10: 12 site(s), e.g. branch 0x82A37B24 -> 0x82A378F0
+0x82C53500  # run10: 1 site(s), e.g. call 0x82C535C8 -> 0x82C53498
+0x82E5DDAC  # run10: 1 site(s), e.g. call 0x82E5DDB0 -> 0x82E5DD9C
+0x82E628C8  # run10: 1 site(s), e.g. call 0x82E628DC -> 0x82E62890
+0x82E64D6C  # run10: 1 site(s), e.g. branch 0x82E64F14 -> 0x82E64BF8
+0x82E64DDC  # run10: 1 site(s), e.g. branch 0x82E64F14 -> 0x82E64BF8
+0x82E65280  # run10: 3 site(s), e.g. branch 0x82E65314 -> 0x82E650AC
+0x82E65358  # run10: 1 site(s), e.g. branch 0x82E655E4 -> 0x82E650CC
+0x82E657DC  # run10: 1 site(s), e.g. branch 0x82E65AC0 -> 0x82E65600
+0x82E658AC  # run10: 1 site(s), e.g. branch 0x82E65AC0 -> 0x82E65600
+0x82FE8634  # run10: 3 site(s), e.g. branch 0x82FE86BC -> 0x82FE862C
+0x82FE8A5C  # run10: 4 site(s), e.g. branch 0x82FE8B20 -> 0x82FE8A54
+0x82FEA130  # run10: 3 site(s), e.g. branch 0x82FEA1C0 -> 0x82FEA128
+0x82FEA568  # run10: 4 site(s), e.g. branch 0x82FEA638 -> 0x82FEA560
+0x83000F00  # run10: 3 site(s), e.g. branch 0x8300104C -> 0x83000A98
+0x83001B70  # run10: 1 site(s), e.g. call 0x83001B8C -> 0x83001AE8

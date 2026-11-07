@@ -82,3 +82,8 @@ ios_port/out/smoke/
 !ios_port/out/ds2_ios.toml
 !ios_port/out/slim_manifest.txt
 !ios_port/REMAINING.md
+
+# This build repo holds NO game .txt data. Upstream *.txt rule was
+# dropping all 14 CMakeLists.txt plus config/text sources. Keep them.
+!*.txt
+!**/CMakeLists.txt
