@@ -51,7 +51,15 @@ jobs:
             libvulkan-dev libzstd-dev libx11-dev libwayland-dev \
             libxcb1-dev libxkbcommon-dev libasound2-dev libxtst-dev
 
+      - name: Cache ReXGlue third-party sources
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: sdk/thirdparty
+          key: rexglue-thirdparty-${{ hashFiles('tools/fetch_thirdparty.py') }}-v1
+
       - name: Fetch ReXGlue SDK third-party sources
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: python3 tools/fetch_thirdparty.py
 
       - name: Fetch Default.xex from a PRIVATE release
@@ -118,7 +126,15 @@ jobs:
           sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -showsdks | grep iphoneos
 
+      - name: Cache ReXGlue third-party sources
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: sdk/thirdparty
+          key: rexglue-thirdparty-${{ hashFiles('tools/fetch_thirdparty.py') }}-v1
+
       - name: Fetch ReXGlue SDK third-party sources
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: python3 tools/fetch_thirdparty.py
 
       - name: Fetch generated code
