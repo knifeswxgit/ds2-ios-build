@@ -893,6 +893,25 @@ hunk("app/src/ds2_app.h",
 """, "ds2_app.h: log sink milestone", '"ds2_app: log sink installed"')
 
 
+hunk("sdk/src/ui/rex_app.cpp",
+"""#include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
+""",
+"""#include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+""", "rex_app: DebugMark include", 'ds2_ios/ios_log_overlay.h"')
+
+hunk("sdk/src/ui/rex_app.cpp",
+     'DS2_MARK("rex_app:',
+     'ds2_ios::DebugMark("rex_app:',
+     "rex_app: DebugMark calls", 'ds2_ios::DebugMark("rex_app:', count=5)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")
