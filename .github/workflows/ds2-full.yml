@@ -47,7 +47,7 @@ jobs:
       - name: Host toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ninja-build clang lld cmake \
+          sudo apt-get install -y -qq ninja-build clang lld cmake wget gnupg \
             libvulkan-dev libzstd-dev libx11-dev libwayland-dev \
             libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libxext-dev libxfixes-dev libxcursor-dev libxi-dev \
@@ -55,6 +55,14 @@ jobs:
             libxrandr-dev libxrender-dev libxss-dev libxtst-dev \
             libice-dev libsm-dev libxkbfile-dev \
             libasound2-dev libdbus-1-dev libudev-dev
+          # ReXGlue is C++23 (std::expected); Ubuntu 24.04's clang 18 is too old.
+          # app/CMakeLists.txt documents clang-20 as the supported host compiler.
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 20 all 2>&1 | tail -3
+          sudo update-alternatives --install /usr/bin/clang clang /usr/lib/llvm-20/bin/clang 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/lib/llvm-20/bin/clang++ 100
+          clang++ --version | head -1
 
       - name: Cache ReXGlue third-party sources
         id: cache-thirdparty
@@ -98,7 +106,7 @@ jobs:
         run: |
           cmake -S sdk -B out/sdk-host -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20 \
             -DCMAKE_C_FLAGS=-march=x86-64-v3 -DCMAKE_CXX_FLAGS=-march=x86-64-v3 \
             -DREXGLUE_BUILD_TESTS=OFF \
             -DREXGLUE_ENABLE_TRACY=OFF \
