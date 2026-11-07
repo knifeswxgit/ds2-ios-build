@@ -54,7 +54,7 @@ std::vector<platform::DynamicLibrary>& LoadedPlugins() {
 
 }  // namespace
 
-#if REX_PLATFORM_SWITCH
+#if REX_PLATFORM_SWITCH || REX_PLATFORM_IOS
 }  // namespace rex::system
 
 // A NRO cannot load code at run time: rexgpu-xenos is linked into the

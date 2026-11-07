@@ -103,6 +103,9 @@ elseif(REXGLUE_PLATFORM_IOS)
     # No dlopen on iOS: link the Xenos GPU plugin into the executable, exactly
     # as the Switch build does.
     rexglue_configure_target(ds2 GPU_PLUGINS xenos)
+    # gpu_plugin_loader.cpp takes the static path on iOS, so the plugin archive
+    # must be linked in (GPU_PLUGINS alone only stages loadable dylibs).
+    target_link_libraries(ds2 PRIVATE rexgpu-xenos)
     # Static MoltenVK exports vkGetInstanceProcAddr when linked directly;
     # zlib is needed by ios_port/include/spvz_reader.h.
     if(REXGLUE_IOS_MOLTENVK)

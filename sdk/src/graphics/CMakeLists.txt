@@ -114,9 +114,9 @@ if(REXGLUE_USE_D3D12)
         ${REXGPU_XENOS_D3D12_SOURCES})
 endif()
 
-if(REXGLUE_PLATFORM_SWITCH)
+if(REXGLUE_PLATFORM_SWITCH OR REXGLUE_PLATFORM_IOS)
     # Linked into the executable (gpu_plugin_loader.cpp calls rex_gpu_create
-    # directly); a NRO cannot load plugins at run time.
+    # directly); neither an NRO nor a sideloaded iOS app loads plugins at runtime.
     add_library(rexgpu-xenos STATIC ${REXGPU_XENOS_SOURCES})
 else()
     add_library(rexgpu-xenos SHARED ${REXGPU_XENOS_SOURCES})

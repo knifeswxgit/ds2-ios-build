@@ -579,6 +579,78 @@ hunk("app/src/ds2_app.h",
 """, "ds2_app.h: accept compressed shader pack", 'spvz.replace_extension(".spvz")')
 
 
+# --- single static Mach-O: no embedded dylibs in a sideloaded .ipa --------
+hunk("sdk/src/system/CMakeLists.txt",
+"""if(REXGLUE_PLATFORM_SWITCH)
+    # A NRO is a single static executable: no shared libraries, no dlopen.
+    # rexglue_switch_configure_target links it whole into the title.
+    add_library(rexruntime STATIC ${REXSYSTEM_SOURCES})
+else()
+""",
+"""if(REXGLUE_PLATFORM_SWITCH OR REXGLUE_PLATFORM_IOS)
+    # Switch NRO and sideloaded iOS app: one static executable, no embedded
+    # dylibs. A .dylib would also force unresolved symbols (MoltenVK entry
+    # points, the iOS input driver) to be satisfied at library link time.
+    add_library(rexruntime STATIC ${REXSYSTEM_SOURCES})
+else()
+""", "system cmake: static rexruntime on iOS",
+     "Switch NRO and sideloaded iOS app: one static executable")
+
+hunk("sdk/src/graphics/CMakeLists.txt",
+"""if(REXGLUE_PLATFORM_SWITCH)
+    # Linked into the executable (gpu_plugin_loader.cpp calls rex_gpu_create
+    # directly); a NRO cannot load plugins at run time.
+    add_library(rexgpu-xenos STATIC ${REXGPU_XENOS_SOURCES})
+else()
+""",
+"""if(REXGLUE_PLATFORM_SWITCH OR REXGLUE_PLATFORM_IOS)
+    # Linked into the executable (gpu_plugin_loader.cpp calls rex_gpu_create
+    # directly); neither an NRO nor a sideloaded iOS app loads plugins at runtime.
+    add_library(rexgpu-xenos STATIC ${REXGPU_XENOS_SOURCES})
+else()
+""", "graphics cmake: static rexgpu-xenos on iOS",
+     "neither an NRO nor a sideloaded iOS app loads plugins")
+
+hunk("sdk/src/system/gpu_plugin_loader.cpp",
+"""#if REX_PLATFORM_SWITCH
+}  // namespace rex::system
+""",
+"""#if REX_PLATFORM_SWITCH || REX_PLATFORM_IOS
+}  // namespace rex::system
+""", "gpu_plugin_loader: direct rex_gpu_create on iOS",
+     "#if REX_PLATFORM_SWITCH || REX_PLATFORM_IOS\n}  // namespace rex::system")
+
+hunk("app/CMakeLists.txt",
+"""    rexglue_configure_target(ds2 GPU_PLUGINS xenos)
+    # Static MoltenVK exports vkGetInstanceProcAddr when linked directly;
+""",
+"""    rexglue_configure_target(ds2 GPU_PLUGINS xenos)
+    # gpu_plugin_loader.cpp takes the static path on iOS, so the plugin archive
+    # must be linked in (GPU_PLUGINS alone only stages loadable dylibs).
+    target_link_libraries(ds2 PRIVATE rexgpu-xenos)
+    # Static MoltenVK exports vkGetInstanceProcAddr when linked directly;
+""", "app cmake: link the static GPU plugin archive on iOS",
+     "gpu_plugin_loader.cpp takes the static path on iOS")
+
+# --- SDL3 owns UIApplicationMain on iOS ------------------------------------
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""#include <rex/ui/windowed_app_context_sdl.h>
+
+#if REX_PLATFORM_WIN32
+""",
+"""#include <rex/ui/windowed_app_context_sdl.h>
+
+#if REX_PLATFORM_IOS
+// SDL3-iOS owns UIApplicationMain. SDL_main.h renames our main() to SDL_main
+// and supplies the real entry point that calls SDL_RunApp / UIKit startup.
+#include <SDL3/SDL_main.h>
+#endif
+
+#if REX_PLATFORM_WIN32
+""", "windowed_app_main_sdl: SDL3 iOS entry point",
+     "SDL3-iOS owns UIApplicationMain")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")
