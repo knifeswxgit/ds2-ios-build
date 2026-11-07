@@ -351,6 +351,23 @@ hunk("sdk/src/graphics/pipeline/shader/spirv_library.cpp",
 #endif
 """, "spirv_library.cpp: allow file-less compressed Restore", "(!file_ && !spvz_)")
 
+hunk("app/src/ds2_app.h",
+"""    const auto dir = rex::filesystem::GetExecutableFolder();
+    if (dir.empty()) return;
+    std::error_code ec;
+""",
+"""#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    // The 501 MiB compressed shader pack is copied into Documents via Files,
+    // together with game_root/. It never goes through GitHub or the .ipa.
+    const auto dir = ds2_ios::DocumentsPath();
+#else
+    const auto dir = rex::filesystem::GetExecutableFolder();
+#endif
+    if (dir.empty()) return;
+    std::error_code ec;
+""", "ds2_app.h: resolve shader pack from Documents on iOS",
+     "The 501 MiB compressed shader pack is copied into Documents")
+
 # --- let ResolveShaderLibrary() accept the compressed sibling --------------
 hunk("app/src/ds2_app.h",
 """    auto usable = [](const std::filesystem::path& p) {

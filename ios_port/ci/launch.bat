@@ -78,21 +78,20 @@ if errorlevel 1 (
 )
 if errorlevel 1 goto :fail
 
-echo [2/6] Uploading private build inputs (21 MB XEX + 501 MB shaders)...
+echo [2/6] Uploading ONLY Default.xex (21 MB)...
+echo     the 501 MB shader pack goes to the phone via Files, not through GitHub
 if not exist "%UPLOAD%" mkdir "%UPLOAD%"
 copy /Y "%XEX%" "%UPLOAD%\Default.xex" >nul
-copy /Y "%SPVZ%" "%UPLOAD%\ds2_shaders.spvz" >nul
-copy /Y "%IDX%" "%UPLOAD%\ds2_shaders.spvz.idx" >nul
 if not exist "%UPLOAD%\Default.xex" goto :fail
-if not exist "%UPLOAD%\ds2_shaders.spvz" goto :fail
-echo     staged under plain names in %UPLOAD%
 gh release view "%RELEASE_TAG%" --repo "%SLUG%" >nul 2>&1
 if errorlevel 1 (
-  gh release create "%RELEASE_TAG%" --repo "%SLUG%" --title "private build inputs" --notes "Personal use only. No game data archives." "%UPLOAD%\Default.xex" "%UPLOAD%\ds2_shaders.spvz" "%UPLOAD%\ds2_shaders.spvz.idx"
+  gh release create "%RELEASE_TAG%" --repo "%SLUG%" --title "private build inputs" --notes "Personal use only. No game data archives." "%UPLOAD%\Default.xex"
 ) else (
-  gh release upload "%RELEASE_TAG%" "%UPLOAD%\Default.xex" "%UPLOAD%\ds2_shaders.spvz" "%UPLOAD%\ds2_shaders.spvz.idx" --repo "%SLUG%" --clobber
+  gh release upload "%RELEASE_TAG%" "%UPLOAD%\Default.xex" --repo "%SLUG%" --clobber
 )
 if errorlevel 1 goto :fail
+REM A draft release is invisible to gh release download in Actions.
+gh release edit "%RELEASE_TAG%" --repo "%SLUG%" --draft=false >nul 2>&1
 
 echo [3/6] Signing secrets...
 set "DO_SIGN=false"

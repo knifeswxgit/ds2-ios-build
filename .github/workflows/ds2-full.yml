@@ -183,25 +183,16 @@ jobs:
           test -n "$EXE"
           echo "EXE=$EXE" >> "$GITHUB_ENV"
 
-      - name: Fetch compressed shader pack from the PRIVATE release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.asset_release }}
-        run: |
-          mkdir -p build/assets
-          gh release download "$TAG" \
-             --pattern 'ds2_shaders.spvz*' --pattern 'Default.xex' \
-             --dir build/assets --repo "$GITHUB_REPOSITORY" --clobber
-          ls -la build/assets
-
       - name: Build .ipa with our own packer (no Xcode here)
+        # The 501 MiB shader pack is NOT bundled: it is copied to the phone's
+        # Documents via Files together with game_root/. The patched
+        # ResolveShaderLibrary() looks for it there. This keeps the .ipa small
+        # and avoids a slow 501 MB upload to GitHub on every run.
         run: |
           python3 ios_port/tools/mkipa.py \
             --executable "$EXE" \
             --plist ios_port/Info.plist \
             --resource ios_port/out/ds2_ios.toml \
-            --resource build/assets/ds2_shaders.spvz \
-            --resource build/assets/ds2_shaders.spvz.idx \
             --out ds2-ios.ipa \
             --bundle-id com.yourteam.ds2ios
           python3 ios_port/tools/mkipa.py --verify ds2-ios.ipa

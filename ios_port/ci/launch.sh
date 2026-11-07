@@ -44,15 +44,20 @@ fi
 REPO_SLUG="$(gh api user --jq .login)/$REPO_NAME"
 echo "      $REPO_SLUG (private)"
 
-echo "[2/6] Uploading private build inputs (21 MB XEX + 501 MB compressed shaders)..."
+echo "[2/6] Uploading ONLY Default.xex (21 MB); shaders go to the phone via Files..."
+mkdir -p "$PROJECT_ROOT/ios_port/out/_upload"
+cp "$XEX" "$PROJECT_ROOT/ios_port/out/_upload/Default.xex"
+STAGED="$PROJECT_ROOT/ios_port/out/_upload/Default.xex"
 if gh release view "$RELEASE_TAG" --repo "$REPO_SLUG" >/dev/null 2>&1; then
-  gh release upload "$RELEASE_TAG" "$XEX" "$SPVZ" "$IDX" --repo "$REPO_SLUG" --clobber
+  gh release upload "$RELEASE_TAG" "$STAGED" --repo "$REPO_SLUG" --clobber
 else
   gh release create "$RELEASE_TAG" \
     --repo "$REPO_SLUG" --title "private build inputs" \
     --notes "Personal use only. No game data archives." \
-    "$XEX" "$SPVZ" "$IDX"
+    "$STAGED"
 fi
+# A draft release is invisible to `gh release download` inside Actions.
+gh release edit "$RELEASE_TAG" --repo "$REPO_SLUG" --draft=false >/dev/null 2>&1
 
 echo "[3/6] Signing secrets (optional)..."
 if [ -n "${DS2_P12:-}" ] && [ -n "${DS2_MOBILEPROVISION:-}" ]; then
