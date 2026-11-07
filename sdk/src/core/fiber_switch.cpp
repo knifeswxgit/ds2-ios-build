@@ -72,12 +72,25 @@ void rex_fiber_entry(void);
 // rex_fiber_trampoline is declared in fiber.h, so it can be a friend of Fiber.
 }
 
+#if REX_PLATFORM_IOS
+// Mach-O (iOS) prefixes C symbols with '_' and has no ELF .type/.size
+// directives; clang's integrated assembler rejects both.
+#define REX_FIBER_ASM_ALIGN ".p2align 2\n"
+#define REX_FIBER_ASM_PROLOG(name) ".globl _" #name "\n" "_" #name ":\n"
+#define REX_FIBER_ASM_EPILOG(name) ""
+#define REX_FIBER_ASM_TRAMPOLINE "_rex_fiber_trampoline"
+#else
+#define REX_FIBER_ASM_ALIGN ".balign 4\n"
+#define REX_FIBER_ASM_PROLOG(name) \
+    ".global " #name "\n" ".type " #name ", %function\n" #name ":\n"
+#define REX_FIBER_ASM_EPILOG(name) ".size " #name ", .-" #name "\n"
+#define REX_FIBER_ASM_TRAMPOLINE "rex_fiber_trampoline"
+#endif
+
 __asm__(
     ".text\n"
-    ".balign 4\n"
-    ".global rex_fiber_swap\n"
-    ".type rex_fiber_swap, %function\n"
-    "rex_fiber_swap:\n"
+    REX_FIBER_ASM_ALIGN
+    REX_FIBER_ASM_PROLOG(rex_fiber_swap)
     "    stp x19, x20, [x0, #0]\n"
     "    stp x21, x22, [x0, #16]\n"
     "    stp x23, x24, [x0, #32]\n"
@@ -104,16 +117,15 @@ __asm__(
     "    ldp d12, d13, [x1, #136]\n"
     "    ldp d14, d15, [x1, #152]\n"
     "    ret\n"
-    ".size rex_fiber_swap, .-rex_fiber_swap\n"
+    REX_FIBER_ASM_EPILOG(rex_fiber_swap)
     "\n"
-    ".balign 4\n"
-    ".global rex_fiber_entry\n"
-    ".type rex_fiber_entry, %function\n"
-    "rex_fiber_entry:\n"
+    REX_FIBER_ASM_ALIGN
+    REX_FIBER_ASM_PROLOG(rex_fiber_entry)
     "    mov x29, #0\n"
     "    mov x30, #0\n"
-    "    b   rex_fiber_trampoline\n"
-    ".size rex_fiber_entry, .-rex_fiber_entry\n");
+    "    b   " REX_FIBER_ASM_TRAMPOLINE "\n"
+    REX_FIBER_ASM_EPILOG(rex_fiber_entry)
+);
 
 namespace rex::thread {
 

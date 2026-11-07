@@ -199,27 +199,6 @@ hunk("sdk/src/graphics/pipeline/shader/spirv_library.cpp",
 """, "spirv_library.cpp: read payload from compressed pack", "const bool payload_ok = spvz_")
 
 
-hunk("app/CMakeLists.txt",
-"""    rexglue_configure_target(ds2 GPU_PLUGINS xenos)
-else()
-""",
-"""    rexglue_configure_target(ds2 GPU_PLUGINS xenos)
-    # Static MoltenVK exports vkGetInstanceProcAddr when linked directly;
-    # zlib is needed by ios_port/include/spvz_reader.h.
-    if(REXGLUE_IOS_MOLTENVK)
-        target_link_libraries(ds2 PRIVATE "${REXGLUE_IOS_MOLTENVK}")
-    else()
-        message(FATAL_ERROR "REXGLUE_IOS_MOLTENVK must point at libMoltenVK.a")
-    endif()
-    target_link_libraries(ds2 PRIVATE z)
-    foreach(fw Metal QuartzCore UIKit Foundation CoreGraphics CoreAudio
-               AudioToolbox GameController CoreHaptics)
-        target_link_libraries(ds2 PRIVATE "-framework ${fw}")
-    endforeach()
-else()
-""", "app cmake: link MoltenVK, zlib and iOS frameworks",
-     "REXGLUE_IOS_MOLTENVK must point at libMoltenVK.a")
-
 # --- iOS input driver: touch + MFi gamepad -> X_INPUT_STATE ---------------
 hunk("sdk/src/input/input_system.cpp",
 """#if REX_PLATFORM_SWITCH
@@ -371,6 +350,28 @@ else()
 endif()
 """, "app cmake: static GPU plugin on iOS", "    # No dlopen on iOS: link the Xenos GPU plugin")
 
+# Depends on the iOS `elseif()` branch above, so it must stay AFTER it.
+hunk("app/CMakeLists.txt",
+"""    rexglue_configure_target(ds2 GPU_PLUGINS xenos)
+else()
+""",
+"""    rexglue_configure_target(ds2 GPU_PLUGINS xenos)
+    # Static MoltenVK exports vkGetInstanceProcAddr when linked directly;
+    # zlib is needed by ios_port/include/spvz_reader.h.
+    if(REXGLUE_IOS_MOLTENVK)
+        target_link_libraries(ds2 PRIVATE "${REXGLUE_IOS_MOLTENVK}")
+    else()
+        message(FATAL_ERROR "REXGLUE_IOS_MOLTENVK must point at libMoltenVK.a")
+    endif()
+    target_link_libraries(ds2 PRIVATE z)
+    foreach(fw Metal QuartzCore UIKit Foundation CoreGraphics CoreAudio
+               AudioToolbox GameController CoreHaptics)
+        target_link_libraries(ds2 PRIVATE "-framework ${fw}")
+    endforeach()
+else()
+""", "app cmake: link MoltenVK, zlib and iOS frameworks",
+     "REXGLUE_IOS_MOLTENVK must point at libMoltenVK.a")
+
 hunk("sdk/src/graphics/pipeline/shader/spirv_library.cpp",
 """  if (!shader || !file_ || translation.is_translated()) return false;
 """,
@@ -412,6 +413,64 @@ hunk("sdk/thirdparty/CMakeLists.txt",
         # Build the loader and MoltenVK revisions shipped by the pinned SDK.
 """, "thirdparty cmake: skip vulkan-loader and moltenvk on iOS",
      "if(APPLE AND NOT REXGLUE_PLATFORM_IOS)")
+
+# --- fiber_switch.cpp: ELF-only assembler directives on Mach-O -------------
+# Mach-O prefixes C symbols with '_' and has no .type/.size directives.
+# clang's integrated assembler rejects them with "unknown directive", and a
+# plain `rex_fiber_swap` label would not satisfy the linker's `_rex_fiber_swap`.
+hunk("sdk/src/core/fiber_switch.cpp",
+"""__asm__(
+    ".text\\n"
+    ".balign 4\\n"
+    ".global rex_fiber_swap\\n"
+    ".type rex_fiber_swap, %function\\n"
+    "rex_fiber_swap:\\n"
+""",
+"""#if REX_PLATFORM_IOS
+// Mach-O (iOS) prefixes C symbols with '_' and has no ELF .type/.size
+// directives; clang's integrated assembler rejects both.
+#define REX_FIBER_ASM_ALIGN ".p2align 2\\n"
+#define REX_FIBER_ASM_PROLOG(name) ".globl _" #name "\\n" "_" #name ":\\n"
+#define REX_FIBER_ASM_EPILOG(name) ""
+#define REX_FIBER_ASM_TRAMPOLINE "_rex_fiber_trampoline"
+#else
+#define REX_FIBER_ASM_ALIGN ".balign 4\\n"
+#define REX_FIBER_ASM_PROLOG(name) \\
+    ".global " #name "\\n" ".type " #name ", %function\\n" #name ":\\n"
+#define REX_FIBER_ASM_EPILOG(name) ".size " #name ", .-" #name "\\n"
+#define REX_FIBER_ASM_TRAMPOLINE "rex_fiber_trampoline"
+#endif
+
+__asm__(
+    ".text\\n"
+    REX_FIBER_ASM_ALIGN
+    REX_FIBER_ASM_PROLOG(rex_fiber_swap)
+""", "fiber_switch: Mach-O symbol names and prologues",
+     "Mach-O (iOS) prefixes C symbols with '_'")
+
+hunk("sdk/src/core/fiber_switch.cpp",
+"""    ".size rex_fiber_swap, .-rex_fiber_swap\\n"
+    "\\n"
+    ".balign 4\\n"
+    ".global rex_fiber_entry\\n"
+    ".type rex_fiber_entry, %function\\n"
+    "rex_fiber_entry:\\n"
+    "    mov x29, #0\\n"
+    "    mov x30, #0\\n"
+    "    b   rex_fiber_trampoline\\n"
+    ".size rex_fiber_entry, .-rex_fiber_entry\\n");
+""",
+"""    REX_FIBER_ASM_EPILOG(rex_fiber_swap)
+    "\\n"
+    REX_FIBER_ASM_ALIGN
+    REX_FIBER_ASM_PROLOG(rex_fiber_entry)
+    "    mov x29, #0\\n"
+    "    mov x30, #0\\n"
+    "    b   " REX_FIBER_ASM_TRAMPOLINE "\\n"
+    REX_FIBER_ASM_EPILOG(rex_fiber_entry)
+);
+""", "fiber_switch: Mach-O epilogues and trampoline symbol",
+     "    REX_FIBER_ASM_EPILOG(rex_fiber_swap)")
 
 # --- memory_posix.cpp: mach_vm.h is an #error stub in the iPhoneOS SDK -----
 # iOS arm64 still has the 64-bit MIG call vm_region_64() (mach/vm_map.h), so

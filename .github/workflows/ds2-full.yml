@@ -234,14 +234,14 @@ jobs:
       # CMake's Xcode generator takes ~3 min to configure. The project only
       # depends on CMake files (already hashed into the key), so a cache hit
       # reuses it and xcodebuild just recompiles the .cpp files we changed.
-      - name: Cache iOS Xcode project and objects
+      # Split restore/save: actions/cache@v4 only saves on job success, and
+      # compile failures are exactly when we iterate. The explicit save step
+      # below runs with always() so the configured project survives failures.
+      - name: Restore iOS Xcode project and objects
         id: cache-ios-tree
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: out/app-ios
-          # Compile failures are exactly when we iterate: keep the configured
-          # project even when the job fails (default only saves on success).
-          save-always: true
           key: ds2-ios-tree-v1-${{ hashFiles('app/CMakeLists.txt', 'sdk/CMakeLists.txt', 'sdk/cmake/**', 'sdk/src/**/CMakeLists.txt', 'sdk/thirdparty/CMakeLists.txt', 'ios_port/cmake/**') }}
 
       - name: Xcode
@@ -275,7 +275,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/moltenvk
-          save-always: true
           key: moltenvk-ios-v1.4.2-v1
 
       - name: MoltenVK iOS static library
@@ -337,6 +336,13 @@ jobs:
             !out/app-ios/**/*.dSYM/**
           retention-days: 7
           if-no-files-found: error
+
+      - name: Save iOS Xcode project and objects
+        if: ${{ always() && steps.cache-ios-tree.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: out/app-ios
+          key: ds2-ios-tree-v1-${{ hashFiles('app/CMakeLists.txt', 'sdk/CMakeLists.txt', 'sdk/cmake/**', 'sdk/src/**/CMakeLists.txt', 'sdk/thirdparty/CMakeLists.txt', 'ios_port/cmake/**') }}
 
   # ------------------------------------------------------------------ package
   package:
