@@ -37,6 +37,11 @@ on:
         required: false
         default: ""
         type: string
+      force_configure:
+        description: "Re-run the 3-minute iOS CMake configure even if the Xcode project is cached"
+        required: false
+        default: false
+        type: boolean
 
 # A new push supersedes an older run: never burn macOS minutes on stale builds.
 concurrency:
@@ -226,6 +231,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CMake's Xcode generator takes ~3 min to configure. The project only
+      # depends on CMake files (already hashed into the key), so a cache hit
+      # reuses it and xcodebuild just recompiles the .cpp files we changed.
+      - name: Cache iOS Xcode project and objects
+        id: cache-ios-tree
+        uses: actions/cache@v4
+        with:
+          path: out/app-ios
+          key: ds2-ios-tree-v1-${{ hashFiles('app/CMakeLists.txt', 'sdk/CMakeLists.txt', 'sdk/cmake/**', 'sdk/src/**/CMakeLists.txt', 'sdk/thirdparty/CMakeLists.txt', 'ios_port/cmake/**') }}
+
       - name: Xcode
         run: |
           brew install cmake ninja python@3.12 || true
@@ -276,6 +291,7 @@ jobs:
           echo "MOLTENVK_INCLUDE=$(dirname "$XCFW")/../include" >> "$GITHUB_ENV"
 
       - name: Configure iOS
+        if: ${{ inputs.force_configure || steps.cache-ios-tree.outputs.cache-hit != 'true' }}
         run: |
           cmake -S app -B out/app-ios -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/ios_port/cmake/ios-arm64.cmake" \
@@ -289,13 +305,23 @@ jobs:
             -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include -I$MOLTENVK_INCLUDE" \
             -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface"
 
+      - name: Use cached Xcode project (skip 3-minute reconfigure)
+        if: ${{ !inputs.force_configure && steps.cache-ios-tree.outputs.cache-hit == 'true' }}
+        run: |
+          # ZERO_CHECK regenerates the project when any CMakeLists.txt is newer
+          # than the generated files. A fresh checkout makes them all newer,
+          # so pin their timestamps; only the Xcode project (restored above)
+          # is authoritative. C++ sources keep their real mtimes, so Xcode
+          # still recompiles exactly the files we edit.
+          find . -type f \( -name 'CMakeLists.txt' -o -name '*.cmake' \) \
+            -not -path './out/*' -exec touch -t 202001010000 {} +
+          test -f out/app-ios/ds2.xcodeproj/project.pbxproj
+          echo "Xcode project restored from cache; configure skipped"
+
       - name: Build Mach-O
         run: |
-          # Keep compiling after the first error so one CI run reports every
-          # broken translation unit instead of one error per 15-minute cycle.
           JOBS="$(sysctl -n hw.ncpu)"
-          cmake --build out/app-ios --config Release --target ds2 -- \
-            -jobs "$JOBS" -continueBuildingAfterErrors
+          cmake --build out/app-ios --config Release --target ds2 -- -jobs "$JOBS"
           find out/app-ios -name ds2 -type f -perm -111 -exec ls -la {} \;
 
       - name: Upload Mach-O
