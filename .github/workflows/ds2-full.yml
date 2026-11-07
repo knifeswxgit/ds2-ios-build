@@ -51,6 +51,7 @@ jobs:
             libvulkan-dev libzstd-dev libx11-dev libwayland-dev \
             libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libxext-dev libxfixes-dev libxcursor-dev libxi-dev \
+            libx11-xcb-dev libwayland-client0 libwayland-dev \
             libxrandr-dev libxrender-dev libxss-dev libxtst-dev \
             libice-dev libsm-dev libxkbfile-dev \
             libasound2-dev libdbus-1-dev libudev-dev
