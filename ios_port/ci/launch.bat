@@ -27,6 +27,10 @@ if not "%DS2_REPO_NAME%"=="" set "REPO_NAME=%DS2_REPO_NAME%"
 set "XEX=%PROJECT_ROOT%\darksouls_nintendo\DARK SOULS II Scholar of the First Sin (homebrew port) for Nintendo Switch [NSP]\switch\ds2\game_root\Default.xex"
 set "SPVZ=%PROJECT_ROOT%\ios_port\out\ds2_shaders.spvz"
 set "IDX=%PROJECT_ROOT%\ios_port\out\ds2_shaders.spvz.idx"
+REM gh release create treats asset paths as GLOB patterns. The real game folder
+REM contains [NSP], which Go's filepath.Glob reads as a character class and
+REM fails with "no matches found". Stage copies under plain names first.
+set "UPLOAD=%PROJECT_ROOT%\ios_port\out\_upload"
 
 echo === DS2 iOS pipeline launcher (cmd.exe) ===
 echo.
@@ -75,11 +79,18 @@ if errorlevel 1 (
 if errorlevel 1 goto :fail
 
 echo [2/6] Uploading private build inputs (21 MB XEX + 501 MB shaders)...
+if not exist "%UPLOAD%" mkdir "%UPLOAD%"
+copy /Y "%XEX%" "%UPLOAD%\Default.xex" >nul
+copy /Y "%SPVZ%" "%UPLOAD%\ds2_shaders.spvz" >nul
+copy /Y "%IDX%" "%UPLOAD%\ds2_shaders.spvz.idx" >nul
+if not exist "%UPLOAD%\Default.xex" goto :fail
+if not exist "%UPLOAD%\ds2_shaders.spvz" goto :fail
+echo     staged under plain names in %UPLOAD%
 gh release view "%RELEASE_TAG%" --repo "%SLUG%" >nul 2>&1
 if errorlevel 1 (
-  gh release create "%RELEASE_TAG%" --repo "%SLUG%" --title "private build inputs" --notes "Personal use only. No game data archives." "%XEX%" "%SPVZ%" "%IDX%"
+  gh release create "%RELEASE_TAG%" --repo "%SLUG%" --title "private build inputs" --notes "Personal use only. No game data archives." "%UPLOAD%\Default.xex" "%UPLOAD%\ds2_shaders.spvz" "%UPLOAD%\ds2_shaders.spvz.idx"
 ) else (
-  gh release upload "%RELEASE_TAG%" "%XEX%" "%SPVZ%" "%IDX%" --repo "%SLUG%" --clobber
+  gh release upload "%RELEASE_TAG%" "%UPLOAD%\Default.xex" "%UPLOAD%\ds2_shaders.spvz" "%UPLOAD%\ds2_shaders.spvz.idx" --repo "%SLUG%" --clobber
 )
 if errorlevel 1 goto :fail
 
