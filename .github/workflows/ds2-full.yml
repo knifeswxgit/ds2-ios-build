@@ -197,11 +197,13 @@ jobs:
       - name: Re-apply iOS patches (idempotent)
         run: python3 ios_port/tools/apply_ios_patches.py . | tail -3
 
-      - name: MoltenVK iOS xcframework
+      - name: MoltenVK iOS static library
         run: |
-          curl -L --fail -o /tmp/MoltenVK.zip \
-            "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.2.11/MoltenVK-all.zip"
-          unzip -q /tmp/MoltenVK.zip -d /tmp/moltenvk
+          # MoltenVK-ios.tar ships MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a
+          curl -L --fail -o /tmp/MoltenVK-ios.tar \
+            "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar"
+          mkdir -p /tmp/moltenvk
+          tar -xf /tmp/MoltenVK-ios.tar -C /tmp/moltenvk
           XCFW="$(find /tmp/moltenvk -name MoltenVK.xcframework -maxdepth 6 | head -1)"
           test -n "$XCFW"
           echo "MOLTENVK_XCFW=$XCFW" >> "$GITHUB_ENV"
