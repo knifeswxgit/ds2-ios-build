@@ -231,18 +231,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # CMake's Xcode generator takes ~3 min to configure. The project only
-      # depends on CMake files (already hashed into the key), so a cache hit
-      # reuses it and xcodebuild just recompiles the .cpp files we changed.
-      # Split restore/save: actions/cache@v4 only saves on job success, and
-      # compile failures are exactly when we iterate. The explicit save step
-      # below runs with always() so the configured project survives failures.
+      # The generated code is 354 MB / 338 translation units (~30 min on a
+      # macOS runner). Each run gets a UNIQUE save key but restores the newest
+      # cache with the same prefix, so object files survive between iterations.
+      # GitHub evicts the oldest caches automatically at the 10 GB repo limit.
       - name: Restore iOS Xcode project and objects
         id: cache-ios-tree
         uses: actions/cache/restore@v4
         with:
           path: out/app-ios
-          key: ds2-ios-tree-v1-${{ hashFiles('app/CMakeLists.txt', 'sdk/CMakeLists.txt', 'sdk/cmake/**', 'sdk/src/**/CMakeLists.txt', 'sdk/thirdparty/CMakeLists.txt', 'ios_port/cmake/**') }}
+          key: ds2-ios-tree-v2-${{ github.run_id }}
+          restore-keys: |
+            ds2-ios-tree-v2-
+            ds2-ios-tree-v1-
 
       - name: Xcode
         run: |
@@ -279,28 +280,35 @@ jobs:
 
       - name: MoltenVK iOS static library
         run: |
-          # MoltenVK-ios.tar ships MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a
-          if [ ! -f /tmp/moltenvk/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a ]; then
+          # The tar holds BOTH dynamic/ and static/ xcframeworks; `find | head -1`
+          # used to pick dynamic/, whose ios-arm64 slice has no libMoltenVK.a.
+          # Stage one canonical, deterministic path for CMake and the linker.
+          LIB=/tmp/moltenvk/libMoltenVK.a
+          INC=/tmp/moltenvk/include
+          if [ ! -f "$LIB" ] || [ ! -d "$INC" ]; then
             curl -L --fail -o /tmp/MoltenVK-ios.tar \
               "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar"
-            mkdir -p /tmp/moltenvk
-            tar -xf /tmp/MoltenVK-ios.tar -C /tmp/moltenvk
+            mkdir -p /tmp/moltenvk/extract
+            tar -xf /tmp/MoltenVK-ios.tar -C /tmp/moltenvk/extract
+            cp /tmp/moltenvk/extract/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a "$LIB"
+            rm -rf "$INC"
+            cp -R /tmp/moltenvk/extract/MoltenVK/MoltenVK/include "$INC"
           else
             echo "MoltenVK restored from cache"
           fi
-          XCFW="$(find /tmp/moltenvk -name MoltenVK.xcframework -maxdepth 6 | head -1)"
-          test -n "$XCFW"
-          echo "MOLTENVK_XCFW=$XCFW" >> "$GITHUB_ENV"
-          echo "MOLTENVK_INCLUDE=$(dirname "$XCFW")/../include" >> "$GITHUB_ENV"
+          test -f "$LIB"
+          test -f "$INC/vulkan/vulkan.h"
+          echo "MOLTENVK_LIB=$LIB" >> "$GITHUB_ENV"
+          echo "MOLTENVK_INCLUDE=$INC" >> "$GITHUB_ENV"
 
       - name: Configure iOS
-        if: ${{ inputs.force_configure || steps.cache-ios-tree.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.force_configure || steps.cache-ios-tree.outputs.cache-matched-key == '' }}
         run: |
           cmake -S app -B out/app-ios -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/ios_port/cmake/ios-arm64.cmake" \
             -DDS2_GENERATED_DIR="$GITHUB_WORKSPACE/$GENERATED_DIR" \
             -DREXGLUE_PLATFORM_IOS=ON \
-            -DREXGLUE_IOS_MOLTENVK="$MOLTENVK_XCFW/ios-arm64/libMoltenVK.a" \
+            -DREXGLUE_IOS_MOLTENVK="$MOLTENVK_LIB" \
             -DCMAKE_BUILD_TYPE=Release \
             -DDS2_PGO=OFF \
             -DREXGLUE_ENABLE_PERF_COUNTERS=OFF \
@@ -309,7 +317,7 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface"
 
       - name: Use cached Xcode project (skip 3-minute reconfigure)
-        if: ${{ !inputs.force_configure && steps.cache-ios-tree.outputs.cache-hit == 'true' }}
+        if: ${{ !inputs.force_configure && steps.cache-ios-tree.outputs.cache-matched-key != '' }}
         run: |
           # ZERO_CHECK regenerates the project when any CMakeLists.txt is newer
           # than the generated files. A fresh checkout makes them all newer,
@@ -348,11 +356,11 @@ jobs:
           if-no-files-found: error
 
       - name: Save iOS Xcode project and objects
-        if: ${{ always() && steps.cache-ios-tree.outputs.cache-hit != 'true' }}
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: out/app-ios
-          key: ds2-ios-tree-v1-${{ hashFiles('app/CMakeLists.txt', 'sdk/CMakeLists.txt', 'sdk/cmake/**', 'sdk/src/**/CMakeLists.txt', 'sdk/thirdparty/CMakeLists.txt', 'ios_port/cmake/**') }}
+          key: ds2-ios-tree-v2-${{ github.run_id }}
 
   # ------------------------------------------------------------------ package
   package:
