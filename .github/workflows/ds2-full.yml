@@ -48,8 +48,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build clang lld cmake \
-            libvulkan-dev libsdl2-dev libzstd-dev libx11-dev libwayland-dev \
-            libxcb1-dev libxkbcommon-dev libasound2-dev
+            libvulkan-dev libzstd-dev libx11-dev libwayland-dev \
+            libxcb1-dev libxkbcommon-dev libasound2-dev libxtst-dev
 
       - name: Fetch ReXGlue SDK third-party sources
         run: python3 tools/fetch_thirdparty.py
@@ -75,7 +75,11 @@ jobs:
             -DREXGLUE_BUILD_TESTS=OFF \
             -DREXGLUE_ENABLE_TRACY=OFF \
             -DREXGLUE_ENABLE_PERF_COUNTERS=OFF \
-            -DREXGLUE_ENABLE_SANITIZERS=OFF
+            -DREXGLUE_ENABLE_SANITIZERS=OFF \
+            -DSDL_X11_XTEST=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF \
+            -DSDL_DUMMYVIDEO=ON -DSDL_DUMMYAUDIO=ON \
+            -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_JACK=OFF \
+            -DSDL_PIPEWIRE=OFF -DSDL_SNDIO=OFF
           cmake --build out/sdk-host --target rexglue -j4
           ls -la sdk/out/linux-amd64/rexglue
 
