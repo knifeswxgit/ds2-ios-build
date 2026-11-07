@@ -1,0 +1,12 @@
+# Dark Souls II: Scholar of the First Sin (Xbox 360), title 465307E4.
+# Only fields confirmed from the XEX header / required by the SDK. No overrides yet: the first codegen run decides
+# what (switch tables, gaps, chunks) has to be declared.
+
+[project]
+name = "ds2"
+sdk_version = "0.10.0"
+game_root = "../assets/game_root"
+
+[entrypoint]
+file_path = "../assets/game_root/Default.xex"   # exact case: the host filesystem is case-sensitive
+out_directory_path = "generated/default"

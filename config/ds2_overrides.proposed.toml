@@ -1,0 +1,59 @@
+# PROPOSED, NOT APPLIED. Fix for the 50 UnresolvedCall errors of codegen run 1 (see 05-unresolved-analysis.md).
+# Apply only with the project owner's approval; check how nfsmw_manifest.toml includes huecos.toml first.
+
+[functions]
+# --- A. this-adjusting thunks: `lwz r3,N(r3)` / `addi r3,r3,N` + `b X`, preceded by a terminator ---
+"0x823A4748" = {}
+"0x823A4750" = {}
+"0x823A4758" = {}
+"0x823A4760" = {}
+"0x823A4790" = {}
+"0x823A4798" = {}
+"0x823A47A0" = {}
+"0x823A47A8" = {}
+"0x823A4850" = {}
+"0x823A4BB8" = {}
+"0x823A4BC0" = {}
+"0x823A4BC8" = {}
+"0x823A4BD0" = {}
+"0x823A4BD8" = {}
+"0x823A4BE0" = {}
+"0x823A4BF0" = {}
+"0x823A4D38" = {}
+"0x823A4D90" = {}
+"0x823A9978" = {}
+"0x823DEDD8" = {}
+"0x823DEDE0" = {}
+"0x82406940" = {}
+"0x8256A7D0" = {}
+"0x82717150" = {}
+"0x826EBF18" = {}
+# --- B. virtual-call stubs: load vtable slot from r3, mtctr, bctr ---
+"0x828C7B10" = {}
+"0x828C7B88" = {}
+"0x828C7C38" = {}
+"0x828C7C48" = {}
+"0x828C7C58" = {}
+"0x828C7C68" = {}
+"0x82FBBA00" = {}
+# --- C. small self-contained functions without PDATA ---
+"0x822844D0" = {}
+"0x824813E0" = {}
+"0x82481408" = {}
+"0x826EBEE8" = {}
+"0x826EBF60" = {}
+"0x826EC020" = {}
+"0x828D3080" = {}
+"0x82F66FF0" = {}
+"0x8332E2C8" = {}
+# --- D. owners of join points (only data/vtable references to the owner) ---
+"0x82646FB0" = { end = 0x82647088 }   # contains target 0x82646FF0, source 0x82647078
+"0x82647360" = { end = 0x82647438 }   # contains target 0x826473A0, source 0x82647428
+"0x82647718" = { end = 0x826477F0 }   # contains target 0x82647758, source 0x826477E0
+"0x82647E20" = { end = 0x82647EF8 }   # contains target 0x82647E60, source 0x82647EE8
+"0x82648200" = { end = 0x826482D8 }   # contains target 0x82648240, source 0x826482C8
+"0x8284B7E8" = { end = 0x8284B878 }   # contains target 0x8284B85C, source 0x8284B86C
+"0x828D8888" = { end = 0x828D8910 }   # contains target 0x828D88F4, source 0x828D8904
+"0x828D89A0" = { end = 0x828D8A28 }   # contains target 0x828D8A0C, source 0x828D8A1C
+# --- E. owner of a join point, no reference to it found ---
+"0x82CFF028" = { end = 0x82CFF098 }   # contains target 0x82CFF064, source 0x82CFF094

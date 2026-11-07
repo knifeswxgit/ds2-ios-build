@@ -1,0 +1,270 @@
+// DS2 port: direct resolve for "Resolve Copy Fast 32bpp 1x/2xMSAA" from a host render target.
+//
+// The usual host render target resolve is two passes: dump the render target into the emulated
+// EDRAM buffer (one thread per sample of the whole tile span), then copy the EDRAM buffer into
+// guest memory with the fast 32bpp resolve shader. This shader does both in one pass: every
+// thread does exactly what a thread of resolve_fast_32bpp_1x2xmsaa does (8 destination pixels,
+// same EDRAM addressing, same destination addressing, red/blue swap and endian swap), but the 8
+// EDRAM samples it would load are taken from the render target that owns them, converted to
+// their EDRAM bits exactly as the dump shader (VulkanRenderTargetCache::GetDumpPipeline) does.
+//
+// One dispatch per render target owning part of the resolved tile span; a thread whose EDRAM tile
+// is not in [owned_local_start, owned_local_end) of the span writes nothing (another dispatch
+// handles it). The caller only takes this path when the owners cover the whole span.
+//
+// Variants: SRC_DEPTH (depth + stencil source), SRC_MS (multisampled source).
+// Generated SPIR-V: tools/ds2/gen_direct_resolve_shaders.sh -> ../vulkan_spirv/ds2_direct_resolve_*.h
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// xenos::ColorRenderTargetFormat or xenos::DepthRenderTargetFormat of the source render target.
+layout(constant_id = 0) const uint kSourceFormat = 0u;
+// xenos::MsaaSamples of the source render target: 0 = 1x, 1 = 2x, 2 = 4x.
+layout(constant_id = 1) const uint kSourceMsaa = 0u;
+// depth_float24_round (D24FS8 conversion).
+layout(constant_id = 2) const bool kDepthFloat24Round = false;
+// Host sample indices of guest 2x MSAA samples 0 and 1 (GetD3D10SampleIndexForGuest2xMSAA).
+layout(constant_id = 3) const uint kMsaa2xSample0 = 0u;
+layout(constant_id = 4) const uint kMsaa2xSample1 = 3u;
+
+layout(set = 0, binding = 0, std430) writeonly buffer XeResolveDest {
+  uvec4 data[];
+} xe_resolve_dest;
+
+#if SRC_MS
+#define XE_TEXTURE texture2DMS
+#define XE_UTEXTURE utexture2DMS
+#else
+#define XE_TEXTURE texture2D
+#define XE_UTEXTURE utexture2D
+#endif
+layout(set = 1, binding = 0) uniform XE_TEXTURE xe_source;
+#if SRC_DEPTH
+layout(set = 1, binding = 1) uniform XE_UTEXTURE xe_source_stencil;
+#endif
+
+layout(push_constant, std430) uniform XeDirectResolveConstants {
+  // draw_util::ResolveCopyShaderConstants, unscaled.
+  uint edram_info;
+  uint coordinate_info;
+  uint dest_info;
+  uint dest_coordinate_info;
+  uint dest_base;
+  // The source render target.
+  uint source_base_tiles;
+  uint source_pitch_tiles;
+  // The resolved tile span and the part of it owned by the source render target, in tiles from
+  // span_base_tiles (as ResolveCopyDumpRectangle: rows of the span pitch, not wrapped).
+  uint span_base_tiles;
+  uint owned_local_start;
+  uint owned_local_end;
+} xe_constants;
+
+// SpirvShaderTranslator::PreClampedFloat32To7e3 (after UnclampedFloat32To7e3's clamp).
+uint XePreClampedFloat32To7e3(uint f32) {
+  uint denormal = bitfieldInsert(f32, 1u, 23, 9) >> min(125u - (f32 >> 23u), 24u);
+  uint normal = f32 - (124u << 23u);
+  uint biased = f32 < 0x3E800000u ? denormal : normal;
+  return bitfieldExtract(biased + 0x7FFFu + bitfieldExtract(biased, 16, 1), 16, 10);
+}
+
+uint XeUnclampedFloat32To7e3(float f) {
+  return XePreClampedFloat32To7e3(floatBitsToUint(min(max(f, 0.0), 31.875)));
+}
+
+// SpirvShaderTranslator::PreClampedDepthTo20e4 with remap_from_0_to_0_5 = true.
+uint XePreClampedDepthTo20e4(uint f32) {
+  const uint kRemapBias = 1u;
+  uint denormal = bitfieldInsert(f32, 1u, 23, 9) >> min((113u - kRemapBias) - (f32 >> 23u), 24u);
+  uint normal = f32 - ((112u - kRemapBias) << 23u);
+  uint biased = f32 < (0x38800000u - (kRemapBias << 23u)) ? denormal : normal;
+  if (kDepthFloat24Round) {
+    biased = biased + 3u + bitfieldExtract(biased, 3, 1);
+  }
+  return bitfieldExtract(biased, 3, 24);
+}
+
+// The EDRAM bits of one sample of the source render target, as the dump shader writes them.
+uint XeLoadPacked(uvec2 rt_sample) {
+  ivec2 pixel;
+  int sample_index = 0;
+  if (kSourceMsaa >= 2u) {
+    pixel = ivec2(rt_sample >> 1u);
+    sample_index = int((rt_sample.x & 1u) | ((rt_sample.y & 1u) << 1u));
+  } else if (kSourceMsaa == 1u) {
+    pixel = ivec2(int(rt_sample.x), int(rt_sample.y >> 1u));
+    sample_index = int((rt_sample.y & 1u) != 0u ? kMsaa2xSample1 : kMsaa2xSample0);
+  } else {
+    pixel = ivec2(rt_sample);
+  }
+#if SRC_MS
+  vec4 source = texelFetch(xe_source, pixel, sample_index);
+#else
+  vec4 source = texelFetch(xe_source, pixel, 0);
+#endif
+  uint packed;
+#if SRC_DEPTH
+#if SRC_MS
+  uint stencil = texelFetch(xe_source_stencil, pixel, sample_index).x;
+#else
+  uint stencil = texelFetch(xe_source_stencil, pixel, 0).x;
+#endif
+  if (kSourceFormat == 0u) {
+    // kD24S8.
+    packed = uint(roundEven(source.x * float(0xFFFFFF)));
+  } else {
+    // kD24FS8.
+    packed = XePreClampedDepthTo20e4(floatBitsToUint(source.x));
+  }
+  packed = bitfieldInsert(stencil, packed, 8, 24);
+#else
+  if (kSourceFormat == 2u || kSourceFormat == 10u) {
+    // k_2_10_10_10, k_2_10_10_10_AS_10_10_10_10.
+    packed = uint(source.x * 1023.0 + 0.5);
+    packed = bitfieldInsert(packed, uint(source.y * 1023.0 + 0.5), 10, 10);
+    packed = bitfieldInsert(packed, uint(source.z * 1023.0 + 0.5), 20, 10);
+    packed = bitfieldInsert(packed, uint(source.w * 3.0 + 0.5), 30, 2);
+  } else if (kSourceFormat == 3u || kSourceFormat == 12u) {
+    // k_2_10_10_10_FLOAT, k_2_10_10_10_FLOAT_AS_16_16_16_16.
+    packed = XeUnclampedFloat32To7e3(source.x);
+    packed = bitfieldInsert(packed, XeUnclampedFloat32To7e3(source.y), 10, 10);
+    packed = bitfieldInsert(packed, XeUnclampedFloat32To7e3(source.z), 20, 10);
+    packed = bitfieldInsert(packed, uint(min(max(source.w, 0.0), 1.0) * 3.0 + 0.5), 30, 2);
+  } else {
+    // k_8_8_8_8 (k_8_8_8_8_GAMMA is not taken by the caller).
+    packed = uint(source.x * 255.0 + 0.5);
+    packed = bitfieldInsert(packed, uint(source.y * 255.0 + 0.5), 8, 8);
+    packed = bitfieldInsert(packed, uint(source.z * 255.0 + 0.5), 16, 8);
+    packed = bitfieldInsert(packed, uint(source.w * 255.0 + 0.5), 24, 8);
+  }
+#endif
+  return packed;
+}
+
+uvec4 XeSwapRedBlue(uvec4 v, uint edram_format) {
+  if (edram_format <= 1u) {
+    return (v & uvec4(0xFF00FF00u)) | ((v & uvec4(0xFFu)) << 16u) | ((v >> 16u) & uvec4(0xFFu));
+  }
+  if (edram_format == 2u || edram_format == 3u || edram_format == 10u || edram_format == 12u) {
+    return (v & uvec4(0xC00FFC00u)) | ((v & uvec4(0x3FFu)) << 20u) | ((v >> 20u) & uvec4(0x3FFu));
+  }
+  return v;
+}
+
+uvec4 XeEndianSwap32(uvec4 v, uint endian) {
+  if (endian == 1u || endian == 2u) {
+    v = ((v & uvec4(0x00FF00FFu)) << 8u) | ((v & uvec4(0xFF00FF00u)) >> 8u);
+  }
+  if (endian == 2u || endian == 3u) {
+    v = (v << 16u) | (v >> 16u);
+  }
+  return v;
+}
+
+void main() {
+  uint edram_info = xe_constants.edram_info;
+  uint coordinate_info = xe_constants.coordinate_info;
+  uint dest_info = xe_constants.dest_info;
+  uint dest_coordinate_info = xe_constants.dest_coordinate_info;
+  if (gl_GlobalInvocationID.x >= ((coordinate_info >> 5u) & 2047u)) {
+    return;
+  }
+  uvec2 pixel_index = gl_GlobalInvocationID.xy << uvec2(3u, 0u);
+
+  // The first of the 8 EDRAM samples, as XeResolveCopySourceFirstSampleAddressBytes.
+  uint sample_select = (dest_coordinate_info >> 28u) & 7u;
+  uint first_sample = sample_select <= 3u ? sample_select : (sample_select == 5u ? 2u : 0u);
+  uint edram_msaa = (edram_info >> 10u) & 3u;
+  uvec2 edram_sample =
+      ((pixel_index + (((uvec2(coordinate_info) >> uvec2(0u, 4u)) & uvec2(15u, 1u)) << uvec2(3u)))
+       << uvec2(greaterThanEqual(uvec2(edram_msaa), uvec2(2u, 1u)))) +
+      ((uvec2(first_sample) >> uvec2(1u, 0u)) & uvec2(1u));
+  uvec2 edram_tile_xy = edram_sample / uvec2(80u, 16u);
+  uvec2 edram_tile_sample = edram_sample - edram_tile_xy * uvec2(80u, 16u);
+  // Physical EDRAM column: depth tiles have their 40-sample halves swapped.
+  if ((edram_info & 4096u) != 0u) {
+    edram_tile_sample.x = edram_tile_sample.x >= 40u ? edram_tile_sample.x - 40u
+                                                     : edram_tile_sample.x + 40u;
+  }
+  uint edram_tile =
+      (((edram_info >> 13u) & 2047u) + edram_tile_xy.y * (edram_info & 1023u) + edram_tile_xy.x) &
+      2047u;
+
+  // Only the part of the span owned by this render target.
+  uint local_tile = (edram_tile - xe_constants.span_base_tiles) & 2047u;
+  if (local_tile < xe_constants.owned_local_start || local_tile >= xe_constants.owned_local_end) {
+    return;
+  }
+
+  // The physical EDRAM sample -> the sample of the render target, inverting the dump shader.
+  uint rt_tile = (edram_tile - xe_constants.source_base_tiles) & 2047u;
+  uint rt_pitch_tiles = xe_constants.source_pitch_tiles;
+  uvec2 rt_sample = uvec2(rt_tile % rt_pitch_tiles, rt_tile / rt_pitch_tiles) * uvec2(80u, 16u);
+  uint rt_tile_sample_x = edram_tile_sample.x;
+#if SRC_DEPTH
+  rt_tile_sample_x = rt_tile_sample_x >= 40u ? rt_tile_sample_x - 40u : rt_tile_sample_x + 40u;
+#endif
+  rt_sample += uvec2(rt_tile_sample_x, edram_tile_sample.y);
+
+  // The 8 samples are consecutive columns of one tile row (and of one 40-sample half).
+  uvec4 pixels_0123 = uvec4(XeLoadPacked(rt_sample), XeLoadPacked(rt_sample + uvec2(1u, 0u)),
+                            XeLoadPacked(rt_sample + uvec2(2u, 0u)),
+                            XeLoadPacked(rt_sample + uvec2(3u, 0u)));
+  uvec4 pixels_4567 = uvec4(XeLoadPacked(rt_sample + uvec2(4u, 0u)),
+                            XeLoadPacked(rt_sample + uvec2(5u, 0u)),
+                            XeLoadPacked(rt_sample + uvec2(6u, 0u)),
+                            XeLoadPacked(rt_sample + uvec2(7u, 0u)));
+
+  if ((dest_info & 16777216u) != 0u) {
+    uint edram_format = (edram_info >> 24u) & 15u;
+    pixels_0123 = XeSwapRedBlue(pixels_0123, edram_format);
+    pixels_4567 = XeSwapRedBlue(pixels_4567, edram_format);
+  }
+
+  // XeResolveDestPixelAddress, 4 bytes per block, unscaled.
+  uvec2 dest_position =
+      pixel_index + (((uvec2(dest_coordinate_info) >> uvec2(20u, 24u)) & uvec2(15u)) << uvec2(3u));
+  int row_pitch_macro_tiles = int(dest_coordinate_info & 1023u);
+  uint dest_address;
+  if ((dest_info & 8u) != 0u) {
+    // XenosTextureTiledAddress3D.
+    int x = int(dest_position.x);
+    int y = int(dest_position.y);
+    int z = int((dest_info >> 4u) & 7u);
+    int z4 = z >> 2;
+    int slice_pitch = int(((dest_coordinate_info >> 10u) & 1023u) << 1u);
+    int macro_offset = ((x & 7) + ((y & 6) << 2)) << 2;
+    int tile_parity = ((y >> 3) + z4) & 1;
+    int bank = tile_parity + ((((x >> 3) + (tile_parity << 1)) & 3) << 1);
+    int tiled = (((((((((x >> 5) + (((y >> 4) + (z4 * slice_pitch)) * row_pitch_macro_tiles)) << 8) &
+                       268435455)
+                      << 1) +
+                     (macro_offset & -16))
+                    << 1) +
+                   (macro_offset & 15)) +
+                  ((z & 3) << 8)) +
+                 ((y & 1) << 4);
+    dest_address = uint(
+        ((((((((bank & 1) << 3) + ((tiled >> 6) & 7)) << 3) + (bank & -2)) << 2) + (tiled & -512))
+         << 3) +
+        (tiled & 63));
+  } else {
+    // XenosTextureTiledAddress2D.
+    int x = int(dest_position.x);
+    int y = int(dest_position.y);
+    int macro_offset = ((x & 7) + ((y & 14) << 2)) << 2;
+    int tiled = (((((x >> 5) + ((y >> 5) * row_pitch_macro_tiles)) << 9) + ((macro_offset & -16) << 1)) +
+                 (macro_offset & 15)) +
+                ((y & 1) << 4);
+    dest_address = uint((((((tiled & -512) << 3) + ((y & 16) << 7)) + ((tiled & 448) << 2)) +
+                         (((((y & 8) >> 2) + (x >> 3)) & 3) << 6)) +
+                        (tiled & 63));
+  }
+  uint dest_index = (dest_address + xe_constants.dest_base) >> 4u;
+  uint endian = dest_info & 7u;
+  xe_resolve_dest.data[dest_index] = XeEndianSwap32(pixels_0123, endian);
+  // XeResolveLocalXAddressXor(4, 2) = 32 bytes.
+  xe_resolve_dest.data[dest_index + 2u] = XeEndianSwap32(pixels_4567, endian);
+}

@@ -1,0 +1,81 @@
+# Nothing derived from the game is committed: its files, the code generated from Default.xex, binaries built from it.
+
+# --- Game files ---------------------------------------------------------------
+assets/
+*.xex
+*.xexp
+*.iso
+*.bin
+*.bdt
+*.bhd
+*.fsb
+*.wmv
+*.txt
+ 
+# --- Generated from the game / build output -----------------------------------
+out/
+app/generated
+generated/
+sdk/out/
+*.log
+*.elf
+*.o
+*.a
+
+CLAUDE.md
+
+# --- Third-party sources --------------------------------------------------------
+# sdk/thirdparty is filled by tools/fetch_thirdparty.py (ReXGlue v0.10.0, c94f5eb, with submodules).
+# Only the files changed by the NFSMW-NX port are tracked (same 7 files as in nfsmw-nx).
+/sdk/thirdparty/*
+!/sdk/thirdparty/CMakeLists.txt
+!/sdk/thirdparty/FFmpeg/
+/sdk/thirdparty/FFmpeg/*
+!/sdk/thirdparty/FFmpeg/config.h
+!/sdk/thirdparty/FFmpeg/config_nfsmw_wmv3.h
+!/sdk/thirdparty/FFmpeg/config_switch_aarch64.h
+!/sdk/thirdparty/FFmpeg/libavcodec/
+/sdk/thirdparty/FFmpeg/libavcodec/*
+!/sdk/thirdparty/FFmpeg/libavcodec/fft_template.c
+!/sdk/thirdparty/FFmpeg/libavcodec/mdct_template.c
+!/sdk/thirdparty/ffmpeg-overlay/
+/sdk/thirdparty/ffmpeg-overlay/*
+!/sdk/thirdparty/ffmpeg-overlay/codec_list.c
+
+# --- Tools --------------------------------------------------------------------
+__pycache__/
+*.pyc
+
+# --- Owner's project root (SW1_ds2 on the Mac) is this repository; local-only folders there ---------------
+/docs/
+/DARK.SOULS*/
+/ds2_logs/
+/switch/
+/backups/
+/logs/
+_xfer/
+_to_delete*/
+.DS_Store
+
+
+# Release artifacts
+release/**/*.nro
+release/**/*.toml
+
+# Output of tools/huecos.py (regenerated, not committed)
+tools/huecos_functions.toml
+
+# iOS build outputs / private payloads (never commit)
+/out/
+/sdk/out/
+/app/out/
+ios_port/out/*.spvz*
+ios_port/out/*.ipa
+ios_port/out/smoke/
+*.p12
+*.mobileprovision
+
+# Upstream ignores *.txt and assets/; keep the small generated manifests.
+!ios_port/out/ds2_ios.toml
+!ios_port/out/slim_manifest.txt
+!ios_port/REMAINING.md

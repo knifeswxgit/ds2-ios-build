@@ -1,0 +1,11 @@
+# DIAGNOSTIC overrides, added on top of ds2_overrides.proposed.toml by app/ds2_manifest.diag-overrides.toml.
+# Each entry is backed by a codegen run whose validation reported it (see docs/handoff/08-session-2026-10-19.md).
+# Not applied to app/ds2_manifest.toml.
+
+[functions]
+# run 4: `0x823A4BF8 from 0x823A9A8C: b` - 8-byte thunk `lwz r3,8(r3); b 0x823B20F8`, preceded by `b`
+"0x823A4BF8" = {}
+# run 10 (REX_FATAL in generated code, also present since run 5): leaf code after `blr` at 0x82FADE94 with no
+# PDATA entry; codegen glued it to 0x82FADE08, so its 4 conditional branches (0x82FADEA8.. -> 0x82FADEC0..) were
+# emitted as "Unresolved branch".
+"0x82FADE98" = {}

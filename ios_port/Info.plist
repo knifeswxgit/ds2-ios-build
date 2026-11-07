@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>ru</string>
+  <key>CFBundleExecutable</key>
+  <string>ds2</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.yourteam.ds2ios</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Dark Souls II</string>
+  <key>CFBundleDisplayName</key>
+  <string>Dark Souls II</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.10</string>
+  <key>CFBundleVersion</key>
+  <string>121</string>
+  <key>MinimumOSVersion</key>
+  <string>17.0</string>
+  <key>LSRequiresIPhoneOS</key>
+  <true/>
+
+  <!-- DS2 is landscape-only on the original console. -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+  <key>UIStatusBarHidden</key>
+  <true/>
+  <key>UIViewControllerBasedStatusBarAppearance</key>
+  <false/>
+  <key>UILaunchScreen</key>
+  <dict/>
+
+  <key>UIRequiredDeviceCapabilities</key>
+  <array>
+    <string>arm64</string>
+    <string>metal</string>
+  </array>
+
+  <!-- Unlock >60 Hz presentation on ProMotion-class devices; harmless on A13. -->
+  <key>CADisableMinimumFrameDurationOnPhone</key>
+  <true/>
+
+  <!-- MFi / Bluetooth controllers (GCController ExtendedGamepad profile). -->
+  <key>GCSupportedGameControllers</key>
+  <array>
+    <dict><key>ProfileName</key><string>ExtendedGamepad</string></dict>
+    <dict><key>ProfileName</key><string>MicroGamepad</string></dict>
+  </array>
+
+  <!-- 5+ GB of game data should be copied into Documents through Files/iTunes,
+       not embedded in the .ipa. The VFS layer resolves sdmc:/switch/ds2/ here. -->
+  <key>UIFileSharingEnabled</key>
+  <true/>
+  <key>LSSupportsOpeningDocumentsInPlace</key>
+  <true/>
+
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
+</dict>
+</plist>

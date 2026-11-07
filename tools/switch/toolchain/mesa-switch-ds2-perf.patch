@@ -1,0 +1,267 @@
+From 3d5b408944e484b602af0571bfdee750e8c56deb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 21 Oct 2026 16:06:18 +0300
+Subject: [PATCH 1/4] DS2 Switch: NAK texture/memory latency 200,
+ peephole_select limit 8, bump compiler revision
+
+---
+ src/nouveau/compiler/nak/opt_instr_sched_common.rs | 7 +++++--
+ src/nouveau/compiler/nak_nir.c                     | 4 +++-
+ src/nouveau/vulkan/nvk_shader.c                    | 2 +-
+ 3 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/src/nouveau/compiler/nak/opt_instr_sched_common.rs b/src/nouveau/compiler/nak/opt_instr_sched_common.rs
+index 2d8be486f6d..186e5afbe94 100644
+--- a/src/nouveau/compiler/nak/opt_instr_sched_common.rs
++++ b/src/nouveau/compiler/nak/opt_instr_sched_common.rs
+@@ -289,7 +289,9 @@ pub fn estimate_variable_latency(sm: &ShaderModelInfo, op: &Op) -> u32 {
+         | Op::Tld4(_)
+         | Op::Tmml(_)
+         | Op::Txd(_)
+-        | Op::Txq(_) => 32,
++        // DS2 Switch port (as nfsmw-nx): on GM20B + shared LPDDR4 a texture miss costs hundreds of cycles.
++        // Only the scheduler's priority changes; scoreboard waits are computed separately.
++        | Op::Txq(_) => 200,
+ 
+         // Surface ops
+         Op::SuLd(_)
+@@ -314,7 +316,8 @@ pub fn estimate_variable_latency(sm: &ShaderModelInfo, op: &Op) -> u32 {
+         | Op::Ipa(_)
+         | Op::CCtl(_)
+         | Op::LdTram(_)
+-        | Op::MemBar(_) => 32,
++        // DS2 Switch port: global memory loads from shared LPDDR4 do not take 32 cycles either.
++        | Op::MemBar(_) => 200,
+ 
+         // Control-flow ops
+         Op::WarpSync(_) => 16,
+diff --git a/src/nouveau/compiler/nak_nir.c b/src/nouveau/compiler/nak_nir.c
+index beb01b1d9db..3f0c26546ef 100644
+--- a/src/nouveau/compiler/nak_nir.c
++++ b/src/nouveau/compiler/nak_nir.c
+@@ -203,8 +203,10 @@ nak_optimize_nir(nir_shader *nir, const struct nak_compiler *nak)
+       LOOP_OPT(nir, nir_opt_dce);
+       LOOP_OPT(nir, nir_opt_cse);
+ 
++      /* DS2 Switch port (as nfsmw-nx): NAK has no if-to-predicate pass, so every surviving if is a real
++       * branch (SSY/BRA/SYNC) on Maxwell; ANV and RADV flatten up to 8 instructions. */
+       nir_opt_peephole_select_options peephole_select_options = {
+-         .limit = 0,
++         .limit = 8,
+          .discard_ok = true,
+       };
+       LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_peephole_select,
+diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
+index e63104958c0..6ba5a40f0c5 100644
+--- a/src/nouveau/vulkan/nvk_shader.c
++++ b/src/nouveau/vulkan/nvk_shader.c
+@@ -82,7 +82,7 @@ nvk_physical_device_compiler_flags(const struct nvk_physical_device *pdev)
+    return (no_cbufs ? 1 << 12 : 0)
+       | (use_edb_buffer_views ? 1 << 13 : 0)
+       | (instance->drirc.misc.ssbo_align_4b ? 1 << 14 : 0)
+-      | (UINT64_C(10) << 16) /* Compiler ABI revision. */
++      | (UINT64_C(11) << 16) /* Compiler ABI revision (DS2 port: 11 = NAK latency/peephole changes). */
+       | (nak_flags << 48);
+ }
+ 
+-- 
+2.43.0
+
+
+From 2f46fb83c1215077b093efda4251d032b423bc25 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 21 Oct 2026 17:10:52 +0300
+Subject: [PATCH 2/4] DS2: host (drm-shim) build of this tree needs <dlfcn.h>
+ in vk_instance.c (not on Switch)
+
+---
+ src/vulkan/runtime/vk_instance.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/vulkan/runtime/vk_instance.c b/src/vulkan/runtime/vk_instance.c
+index 316302221ca..aafc4e4c5f1 100644
+--- a/src/vulkan/runtime/vk_instance.c
++++ b/src/vulkan/runtime/vk_instance.c
+@@ -39,7 +39,9 @@
+ #endif
+ 
+ #ifndef _WIN32
+-// #include "dlfcn.h"
++#ifndef __SWITCH__
++#include <dlfcn.h> /* DS2: host (drm-shim) builds of this tree */
++#endif
+ #endif
+ 
+ #define VERSION_IS_1_0(version) \
+-- 
+2.43.0
+
+
+From 7eae6df319738b6f8cf196078f26ad6571d6b255 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 21 Oct 2026 20:58:29 +0300
+Subject: [PATCH 3/4] DS2 Switch: bind set UBO descriptors from the CPU mapping
+ on Maxwell (no indirect GPFIFO segments)
+
+NVK_SWITCH_CBUF_DESC_INDIRECT=1 restores the indirect path.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LXFoLk8fEvKbvg3kaZBmo7
+---
+ src/nouveau/vulkan/nvk_cmd_buffer.c | 31 +++++++++++++++++++++++++++++
+ src/nouveau/vulkan/nvk_device.c     |  2 ++
+ src/nouveau/vulkan/nvk_device.h     |  5 +++++
+ 3 files changed, 38 insertions(+)
+
+diff --git a/src/nouveau/vulkan/nvk_cmd_buffer.c b/src/nouveau/vulkan/nvk_cmd_buffer.c
+index 60ae745ace7..933957792d4 100644
+--- a/src/nouveau/vulkan/nvk_cmd_buffer.c
++++ b/src/nouveau/vulkan/nvk_cmd_buffer.c
+@@ -1768,6 +1768,37 @@ nvk_cmd_buffer_get_cbuf_addr(struct nvk_cmd_buffer *cmd,
+    }
+ 
+    case NVK_CBUF_TYPE_UBO_DESC: {
++#ifdef HAVE_SWITCH_PLATFORM
++      /* DS2 Switch: on Maxwell (no MME memory reads) a UBO descriptor that
++       * lives in a regular descriptor set is otherwise bound by pushing its
++       * 12 bytes as an indirect GPFIFO segment.  That costs two GPFIFO
++       * entries per binding, a no-prefetch (sync) entry, and the pending
++       * MME-data semaphore drain after every barrier.  Xenia rebinds ~5
++       * UBOs per stage on almost every draw, so a frame needed ~10k GPFIFO
++       * entries and NVK had to split it into several kickoffs that each
++       * waited for the previous one to retire.
++       *
++       * Without UPDATE_AFTER_BIND the set contents cannot legally change
++       * between binding and execution, and descriptor memory is written by
++       * the CPU only, so reading the descriptor from the CPU mapping at
++       * record time gives the same value the GPU would fetch.
++       */
++      if (desc->sets[cbuf->desc_set].type == NVK_DESCRIPTOR_SET_TYPE_SET &&
++          nvk_cmd_buffer_device(cmd)->switch_cbuf_desc_cpu) {
++         const struct nvk_descriptor_set *set = desc->sets[cbuf->desc_set].set;
++         if (set != NULL && set->map != NULL &&
++             !(set->layout->flags &
++               VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT) &&
++             cbuf->desc_offset + sizeof(union nvk_buffer_descriptor) <=
++                set->size_B) {
++            union nvk_buffer_descriptor set_desc;
++            memcpy(&set_desc, (const char *)set->map + cbuf->desc_offset,
++                   sizeof(set_desc));
++            *addr_out = nvk_ubo_descriptor_addr(pdev, set_desc);
++            return true;
++         }
++      }
++#endif
+       if (desc->sets[cbuf->desc_set].type != NVK_DESCRIPTOR_SET_TYPE_PUSH)
+          return false;
+ 
+diff --git a/src/nouveau/vulkan/nvk_device.c b/src/nouveau/vulkan/nvk_device.c
+index 2dcd1f2791c..b687c1aa0c5 100644
+--- a/src/nouveau/vulkan/nvk_device.c
++++ b/src/nouveau/vulkan/nvk_device.c
+@@ -337,6 +337,8 @@ nvk_CreateDevice(VkPhysicalDevice physicalDevice,
+ 
+ #ifdef HAVE_SWITCH_PLATFORM
+    dev->ubo_delta_enabled = true;
++   dev->switch_cbuf_desc_cpu =
++      !debug_get_bool_option("NVK_SWITCH_CBUF_DESC_INDIRECT", false);
+ #endif
+ 
+    dev->vk.shader_ops = &nvk_device_shader_ops;
+diff --git a/src/nouveau/vulkan/nvk_device.h b/src/nouveau/vulkan/nvk_device.h
+index 1e3e616ef20..37fbfb23d52 100644
+--- a/src/nouveau/vulkan/nvk_device.h
++++ b/src/nouveau/vulkan/nvk_device.h
+@@ -54,6 +54,11 @@ struct nvk_device {
+     */
+    bool cpu_write_mem_uncached;
+    bool ubo_delta_enabled;
++   /* Horizon: bind set UBO descriptors from the CPU mapping (see
++    * nvk_cmd_buffer_get_cbuf_addr).  NVK_SWITCH_CBUF_DESC_INDIRECT=1 restores
++    * the indirect GPFIFO path for A/B comparisons.
++    */
++   bool switch_cbuf_desc_cpu;
+ 
+    struct nvk_upload_queue upload;
+ 
+-- 
+2.43.0
+
+
+From c0eeb5a6fe21efa6180db33fad150496e4d111d6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 21 Oct 2026 23:49:46 +0300
+Subject: [PATCH 4/4] DS2 Switch: sparse binding/residency for buffers (images
+ stay off); NVK_SWITCH_SPARSE_BUFFER=0 disables
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LXFoLk8fEvKbvg3kaZBmo7
+---
+ src/nouveau/vulkan/nvk_physical_device.c | 26 ++++++++++++++++++------
+ 1 file changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index a9a7985778f..deed747fadd 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -349,9 +349,7 @@ static bool
+ nvk_sparse_binding_supported(const struct nv_device_info *info)
+ {
+ #ifdef __SWITCH__
+-   /* Switch has no ctx_bind implementation; disable sparse features until
+-    * vkQueueBindSparse can be supported.
+-    */
++   /* Images: no sparse residency on Switch yet. */
+    (void)info;
+    return false;
+ #else
+@@ -359,6 +357,22 @@ nvk_sparse_binding_supported(const struct nv_device_info *info)
+ #endif
+ }
+ 
++/* Sparse binding of buffers only.  On Switch the bind context is CPU-side
++ * (nvkmd_switch_ctx_bind maps BOs at fixed offsets of a reserved sparse VA
++ * range).  DS2: Xenia's 512 MB guest-memory mirror is otherwise allocated in
++ * full from the process heap.  NVK_SWITCH_SPARSE_BUFFER=0 turns it off.
++ */
++static bool
++nvk_sparse_buffer_supported(const struct nv_device_info *info)
++{
++#ifdef __SWITCH__
++   (void)info;
++   return debug_get_bool_option("NVK_SWITCH_SPARSE_BUFFER", true);
++#else
++   return nvk_sparse_binding_supported(info);
++#endif
++}
++
+ static void
+ nvk_get_device_features(const struct nv_device_info *info,
+                         const struct vk_device_extension_table *supported_extensions,
+@@ -413,12 +427,12 @@ nvk_get_device_features(const struct nv_device_info *info,
+       .shaderInt16 = true,
+       .shaderResourceResidency = info->cls_eng3d >= VOLTA_A,
+       .shaderResourceMinLod = info->cls_eng3d >= VOLTA_A,
+-      .sparseBinding = nvk_sparse_binding_supported(info),
++      .sparseBinding = nvk_sparse_buffer_supported(info),
+       .sparseResidency2Samples = nvk_sparse_binding_supported(info),
+       .sparseResidency4Samples = nvk_sparse_binding_supported(info),
+       .sparseResidency8Samples = nvk_sparse_binding_supported(info),
+       .sparseResidencyAliased = nvk_sparse_binding_supported(info),
+-      .sparseResidencyBuffer = nvk_sparse_binding_supported(info),
++      .sparseResidencyBuffer = nvk_sparse_buffer_supported(info),
+       .sparseResidencyImage2D = nvk_sparse_binding_supported(info),
+       .sparseResidencyImage3D = nvk_sparse_binding_supported(info),
+       .variableMultisampleRate = true,
+@@ -1712,7 +1726,7 @@ nvk_create_physical_device_from_nvkmd(struct nvk_instance *instance,
+    VkQueueFlags queue_flags = VK_QUEUE_GRAPHICS_BIT |
+                               VK_QUEUE_COMPUTE_BIT |
+                               VK_QUEUE_TRANSFER_BIT;
+-   if (nvk_sparse_binding_supported(&nvkmd->dev_info))
++   if (nvk_sparse_buffer_supported(&nvkmd->dev_info))
+       queue_flags |= VK_QUEUE_SPARSE_BINDING_BIT;
+ 
+    pdev->queue_families[pdev->queue_family_count++] = (struct nvk_queue_family) {
+-- 
+2.43.0
+

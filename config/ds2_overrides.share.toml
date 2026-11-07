@@ -1,0 +1,14 @@
+# RC97: functions that read r14-r31/cr/ctr/xer before writing them (tools lee_antes): keep registers in ctx.
+
+[functions]
+"0x82609BE8" = { share_registers = true }
+"0x829C7FF4" = { share_registers = true }
+"0x829C84C0" = { share_registers = true }
+"0x829C8850" = { share_registers = true }
+"0x8317A258" = { share_registers = true }
+"0x8317A890" = { share_registers = true }
+"0x833DE6A8" = { share_registers = true }
+"0x833DEA50" = { share_registers = true }
+"0x833DED10" = { share_registers = true }
+"0x833DEF78" = { share_registers = true }
+"0x833E00A0" = { share_registers = true }
