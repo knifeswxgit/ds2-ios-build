@@ -239,6 +239,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: out/app-ios
+          # Compile failures are exactly when we iterate: keep the configured
+          # project even when the job fails (default only saves on success).
+          save-always: true
           key: ds2-ios-tree-v1-${{ hashFiles('app/CMakeLists.txt', 'sdk/CMakeLists.txt', 'sdk/cmake/**', 'sdk/src/**/CMakeLists.txt', 'sdk/thirdparty/CMakeLists.txt', 'ios_port/cmake/**') }}
 
       - name: Xcode
@@ -272,6 +275,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/moltenvk
+          save-always: true
           key: moltenvk-ios-v1.4.2-v1
 
       - name: MoltenVK iOS static library

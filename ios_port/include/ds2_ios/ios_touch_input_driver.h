@@ -23,6 +23,16 @@
 
 namespace ds2_ios {
 
+// input_driver.h declares these unqualified inside `rex::input`, where they
+// resolve through the enclosing `rex` namespace. Our class lives in ds2_ios,
+// so the names have to be imported explicitly.
+using rex::X_RESULT;
+using rex::X_STATUS;
+using rex::input::X_INPUT_CAPABILITIES;
+using rex::input::X_INPUT_KEYSTROKE;
+using rex::input::X_INPUT_STATE;
+using rex::input::X_INPUT_VIBRATION;
+
 class IosTouchInputDriver final : public rex::input::InputDriver {
  public:
   IosTouchInputDriver(rex::ui::Window* window, size_t window_z_order);
