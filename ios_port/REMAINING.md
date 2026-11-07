@@ -1,70 +1,46 @@
-# Что осталось дописать в коде
+# Что осталось после 14:02
 
-Конвейер (codegen → сборка → упаковка → подпись) готов, упаковщик проверен на реальном 501-МиБ паке. Ниже — **единственные** незакрытые части: платформенный слой iOS. Всё остальное уже либо сделано, либо автоматизировано.
+Платформенный слой написан, репозиторий собран и закоммичен (`ds2-ios-build/`, коммит `dd43634`). Ниже — честное состояние: что сделано, что осталось **только на первой реальной сборке**.
 
-## 1. Точка входа UIKit (блокер №1)
+## ✅ Сделано в этом проходе
 
-Сейчас `app/src/main.cpp` — это `REX_DEFINE_APP(ds2, Ds2App::Create)`, хостовый цикл. На iOS нужен `.app` с `UIApplicationMain`.
+| Часть | Файлы |
+|---|---|
+| Точка входа | **не пишется с нуля**: SDK использует `windowed_app_main_sdl.cpp`, а SDL3-iOS сам предоставляет `UIApplicationMain`. Весь `SDLWindowedAppContext` / `WindowSDL` / `CAMetalLayerSurface` переиспользуется |
+| Визуальный тач-оверлей | `ios_port/src/ios_paths.mm` — `DS2TouchOverlayView` на `CAShapeLayer`: два стика, A/B/X/Y, LB/RB, LT/RT, MENU, добавляется в key window |
+| Пути | `ios_paths.h/.mm`: `DocumentsPath()`, `BundlePath()`, обработчик `UIApplicationDidReceiveMemoryWarningNotification`. `ds2_app.h::OnConfigurePaths` пропатчен: `game_root`/`user` в Documents, `ds2.toml` в бандле |
+| Драйвер ввода | `ios_touch_input_driver.h/.cpp` — один XInput-геймпад, SDL event watch (не перехватывает события UI-цикла), мультитач-стики с мёртвой зоной, LT/RT, MFi/Bluetooth через `SDL_EVENT_GAMEPAD_*`, `packet_number`, вибрация. Зарегистрирован в `CreateDefaultInputSystem()` |
+| CMake | iOS-сорцы, include-пути, `-fobjc-arc`, опциональный `REXGLUE_IOS_SDL3`, статический MoltenVK + zlib + фреймворки |
+| Репозиторий | `ds2-ios-build/`: 1140 файлов, 4.04 МиБ в git, 2 коммита, workflow на месте, большие данные в git не попадают |
+| Запуск | `ios_port/ci/launch.sh` — одна команда после `gh auth login` |
 
-Новые файлы: `ios_port/src/main_ios.mm`, `DS2AppDelegate.h/.mm`, `DS2ViewController.h/.mm`.
+Всего **25 патчей / 12 файлов / +155 строк** в SDK, идемпотентно.
 
-- `UIViewController` с `+[CAEAGLLayer layerClass]`-аналогом: `CAMetalLayer` как backing layer;
-- `CADisplayLink` на 60/120 Гц → тик presentations;
-- `UIInterfaceOrientationLandscape*` только (уже в Info.plist);
-- передать `(void*)CAMetalLayer` в `rex::ui::CAMetalLayerSurface` — этот класс **уже есть** в `sdk/include/rex/ui/surface_mac.h`, он создан под macOS/MoltenVK;
-- заменить `windowed_app_context_switch.h` на iOS-аналог (`WindowedAppContextIOS`) — образец цикла сообщений лежит в Switch-версии.
+## ⚠️ Осталось (только по логу первой сборки)
 
-CMake: добавить `main_ios.mm`/`AppDelegate.mm`/`ViewController.mm` в `DS2_SOURCES` при `REXGLUE_PLATFORM_IOS` и убрать `main.cpp` из этого таргета.
+1. **Линковка SDL3 под iOS.** `windowed_app_main_sdl.cpp` и SDL event watch требуют SDL3, собранный для `arm64-apple-ios`. Либо `fetch_thirdparty.py` принесёт SDL3 как сабмодуль и CMake соберёт его сам, либо передать `-DREXGLUE_IOS_SDL3=<SDL3.xcframework/ios-arm64/libSDL3.a>`. Что именно — покажет первый `cmake --build`.
+2. **MoltenVK static entry points.** Патч маршрутизирует iOS на `vkGetInstanceProcAddr` напрямую, но `REXGLUE_IOS_MOLTENVK` должен указывать на реальный `libMoltenVK.a` из xcframework. Проверить, что MoltenVK экспортирует символ при статической линковке.
+3. **`VK_EXT_metal_surface` из `CAMetalLayer`.** `surface_mac.h` уже умеет, но нужно подтвердить, что SDL3-iOS создаёт `SDL_MetalView` и отдаёт слой. Если нет — написать 20-строчный `CAMetalLayerSurface` без SDL.
+4. **`ds2_native_depth_bias_absolute = false`** на MoltenVK (`VK_EXT_depth_bias_control` недоступен) — поправить в `ds2_ios.toml` после первого кадра.
+5. **Аудио**: `sdl_audio_system` (SDL3-iOS → CoreAudio) либо `AVAudioEngine`.
+6. **Jetsam-профилирование**: `SetLowMemoryCallback` уже зовётся, но сам сброс `texture_cache` + LRU `SpvzReader` надо привязать к нему в рантайме.
 
-## 2. Ввод
+## 🚀 Запуск
 
-`ios_port/TOUCH_CONTROLS.md` — готовая спецификация по реальному `InputDriver` / `X_INPUT_STATE`.
+```bash
+gh auth login --web --git-protocol https     # один раз, единственный ручной шаг
+bash ios_port/ci/launch.sh
+```
 
-Новые файлы: `sdk/include/rex/input/ios/ios_touch_input_driver.h`, `sdk/src/input/ios_touch_input_driver.mm`.
+`launch.sh` создаёт приватный репозиторий, пушит коммит, заливает `Default.xex` (21 МБ) + `ds2_shaders.spvz` (501 МБ) в приватный релиз, задаёт секреты подписи, запускает `ds2-full.yml`, ждёт и скачивает `.ipa`.
 
-- `UITouch` → снапшот в `std::atomic`, `GetDeviceState` читает без блокировки главного потока;
-- `GCController` (`GCExtendedGamepad`) → тот же `X_INPUT_STATE`;
-- `X_INPUT_VIBRATION` → `CoreHaptics`;
-- **важно:** поля `be<uint16_t>`/`be<int16_t>` писать через обёртку, не `memcpy`.
-
-## 3. Аудио
-
-`rex/audio/sdl/sdl_audio_system.h` — SDL2 под iOS использует CoreAudio, это самый короткий путь. Альтернатива: `ios_audio_system.mm` на `AVAudioEngine`. XMA-декодер (`sdk/src/audio/xma/`) уже портабельный C, менять не надо.
-
-## 4. Файловая система
-
-`sdmc:/switch/ds2/...` → `NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, ...)`. Патчится в `sdk/src/core/filesystem_posix.cpp` (там уже есть `__APPLE__`-ветки) и `app/src/ds2_dlc.cpp`.
-
-Данные (~5.4 ГиБ) кладутся в `Documents` через Files, а не в `.ipa`; `slim_manifest.txt` говорит, что именно копировать.
-
-## 5. MoltenVK: довести линковку
-
-Патч уже маршрутизирует iOS на статические entry points (`vkGetInstanceProcAddr` напрямую, как в NRO) и отключает macOS-staging dylib. Осталось на первой реальной сборке проверить:
-
-- `REXGLUE_IOS_MOLTENVK` указывает на `MoltenVK.xcframework/ios-arm64/libMoltenVK.a`;
-- `VK_EXT_depth_bias_control` на MoltenVK недоступен → использовать rollback-флаги из `ds2.toml` (`ds2_native_depth_bias_absolute = false`);
-- `VK_EXT_metal_surface` создаётся из `CAMetalLayer`;
-- `MoltenVK` лимит сэмплеров — обходки уже есть в `texture_cache.cpp`.
-
-## 6. Память (iPhone 11, jetsam ~1.8–2 ГБ)
-
-- Гостевая память X360 512 МБ + текстурный кеш + 6 блоков LRU шейдеров (~6 МиБ) должны уложиться;
-- `ds2_render_scale = 0.75`, `ds2_native_msaa_host = false`, `ds2_fps_cap = 30` уже выставлены;
-- при `didReceiveMemoryWarning` сбрасывать `texture_cache` и LRU `SpvzReader`;
-- профилировать после первого запуска, не до.
-
-## 7. Порядок
-
-1. Запустить `ds2-full.yml` → получить первую ошибку линковки (это нормально, она укажет точное место).
-2. Написать UIKit-точку входа → добиться первого кадра.
-3. Ввод → аудио → VFS.
-4. Профилирование памяти/FPS на девайсе, подстройка `ds2_ios.toml`.
-5. Подпись своим сертификатом, установка.
+При первом прогоне почти наверняка выпадет ошибка линковки из пунктов 1–3 — это ожидаемо и нормально: кинь сюда лог, допишу по факту.
 
 ## Что НЕ надо делать
 
 - Не писать Metal-рендерер с нуля — MoltenVK + SPIR-V уже в SDK.
 - Не писать asm-фиберы — `fiber_switch.cpp` переиспользован.
 - Не писать JIT/эмулятор PowerPC — статическая рекомпиляция делает codegen.
-- Не тащить 8 ГБ в CI — достаточно 21 МБ `Default.xex`.
-- Не сжимать BDT — измерено: ×1.00–1.03, данные несжимаемы.
+- Не писать UIKit `UIApplicationMain` вручную — его даёт SDL3-iOS.
+- Не тащить 8 ГБ в CI — достаточно 21 МБ XEX + 501 МБ сжатых шейдеров.
+- Не сжимать BDT — измерено ×1.00–1.03, данные несжимаемы.
