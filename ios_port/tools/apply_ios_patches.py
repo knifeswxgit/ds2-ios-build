@@ -321,6 +321,37 @@ hunk("sdk/src/ui/vulkan/vulkan_instance.cpp",
      "vulkan_instance: direct vkGetInstanceProcAddr for MoltenVK",
      "#elif REX_PLATFORM_SWITCH || REX_PLATFORM_IOS")
 
+# api.h defines VK_NO_PROTOTYPES for every platform, so the two statically
+# linked entry points are not declared by vulkan.h. The Switch build declares
+# them by hand; iOS (static libMoltenVK.a) needs exactly the same declarations.
+hunk("sdk/src/ui/vulkan/vulkan_instance.cpp",
+"""#if REX_PLATFORM_SWITCH
+// NVK for Horizon is linked statically (Mesa's libvulkan.a) and exports the
+// entry points directly. api.h defines VK_NO_PROTOTYPES, so they have to be
+// declared by hand.
+""",
+"""#if REX_PLATFORM_SWITCH || REX_PLATFORM_IOS
+// NVK for Horizon (Mesa's libvulkan.a) and MoltenVK for iOS (libMoltenVK.a)
+// are linked statically and export the entry points directly. api.h defines
+// VK_NO_PROTOTYPES, so they have to be declared by hand.
+""", "vulkan_instance: declare static Vulkan entry points on iOS",
+     "MoltenVK for iOS (libMoltenVK.a)")
+
+hunk("sdk/src/ui/vulkan/vulkan_instance.cpp",
+     "#endif  // REX_PLATFORM_SWITCH\n",
+     "#endif  // REX_PLATFORM_SWITCH || REX_PLATFORM_IOS\n",
+     "vulkan_instance: entry point guard comment",
+     "#endif  // REX_PLATFORM_SWITCH || REX_PLATFORM_IOS")
+
+# On iOS there is no dlopen'ed loader: GetSymbol() would return nullptr and
+# overwrite the two pointers set above, making Create() fail at runtime.
+hunk("sdk/src/ui/vulkan/vulkan_instance.cpp",
+     "#if !REX_PLATFORM_SWITCH\n",
+"""#if !REX_PLATFORM_SWITCH && !REX_PLATFORM_IOS
+// iOS / Switch already filled these two from the statically linked runtime.
+""", "vulkan_instance: do not clobber static entry points on iOS",
+     "#if !REX_PLATFORM_SWITCH && !REX_PLATFORM_IOS")
+
 hunk("sdk/cmake/rexglue_helpers.cmake",
      "    if(APPLE AND REXGLUE_USE_VULKAN)\n",
      "    if(APPLE AND NOT REXGLUE_PLATFORM_IOS AND REXGLUE_USE_VULKAN)\n",

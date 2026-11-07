@@ -27,6 +27,21 @@ on:
         required: false
         default: false
         type: boolean
+      force_codegen:
+        description: "Re-run PowerPC -> ARM64 codegen even if the generated C++ is cached"
+        required: false
+        default: false
+        type: boolean
+      reuse_run_id:
+        description: "Optional: reuse the ds2-generated artifact from an earlier run id (fast iteration)"
+        required: false
+        default: ""
+        type: string
+
+# A new push supersedes an older run: never burn macOS minutes on stale builds.
+concurrency:
+  group: ds2-ios-full-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -44,6 +59,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The XEX never changes. Generated ARM64 C++ is a pure function of the
+      # XEX + the codegen tool, so a cache hit skips ~10 min of CLI build and
+      # static recompilation. Bump v3 (or run with force_codegen=true) to
+      # intentionally regenerate.
+      - name: Cache generated ARM64 C++
+        id: cache-generated
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GENERATED_DIR }}
+          key: ds2-generated-v3-${{ hashFiles('app/ds2_manifest.diag-dataonly.toml', 'sdk/src/rexglue/**', 'sdk/src/codegen/**') }}
+          restore-keys: |
+            ds2-generated-v3-
+
+      # Fast iteration: reuse the generated ARM64 C++ from the last run instead
+      # of spending 10 minutes rebuilding the codegen CLI on every compile fix.
+      - name: Reuse generated code from an earlier run
+        if: inputs.reuse_run_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.reuse_run_id }}
+        run: |
+          gh run download "$RUN_ID" -n ds2-generated \
+            -D "$GENERATED_DIR" --repo "$GITHUB_REPOSITORY"
+          if [ -f "$GENERATED_DIR/ds2-generated/sources.cmake" ]; then
+            mv "$GENERATED_DIR"/ds2-generated/* "$GENERATED_DIR"/
+            rmdir "$GENERATED_DIR/ds2-generated"
+          fi
+          test -f "$GENERATED_DIR/sources.cmake"
+
       - name: Cache clang-20 toolchain
         id: cache-clang
         uses: actions/cache@v4
@@ -52,6 +96,7 @@ jobs:
           key: llvm-20-noble-${{ runner.os }}-v1
 
       - name: Host toolchain
+        if: ${{ inputs.reuse_run_id == '' && (inputs.force_codegen || steps.cache-generated.outputs.cache-hit != 'true') }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build clang lld cmake wget gnupg \
@@ -83,10 +128,11 @@ jobs:
           key: rexglue-thirdparty-${{ hashFiles('tools/fetch_thirdparty.py') }}-v1
 
       - name: Fetch ReXGlue SDK third-party sources
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
+        if: ${{ inputs.reuse_run_id == '' && (inputs.force_codegen || steps.cache-generated.outputs.cache-hit != 'true') && steps.cache-thirdparty.outputs.cache-hit != 'true' }}
         run: python3 tools/fetch_thirdparty.py
 
       - name: Make SDL3 a real git repo (its CMake calls git_describe)
+        if: ${{ inputs.reuse_run_id == '' && (inputs.force_codegen || steps.cache-generated.outputs.cache-hit != 'true') }}
         run: |
           D=sdk/thirdparty/sdl3
           if [ -f "$D/.git" ]; then
@@ -101,6 +147,7 @@ jobs:
           fi
 
       - name: Fetch Default.xex from a PRIVATE release
+        if: ${{ inputs.reuse_run_id == '' && (inputs.force_codegen || steps.cache-generated.outputs.cache-hit != 'true') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.asset_release }}
@@ -125,6 +172,7 @@ jobs:
             rexglue-build-linux-
 
       - name: Build the rexglue codegen CLI (SDK only, no game code needed)
+        if: ${{ inputs.reuse_run_id == '' && (inputs.force_codegen || steps.cache-generated.outputs.cache-hit != 'true') }}
         run: |
           cmake -S sdk -B out/sdk-host -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -143,6 +191,7 @@ jobs:
           ls -la sdk/out/linux-amd64/rexglue
 
       - name: Run static recompilation PowerPC -> ARM64 C++
+        if: ${{ inputs.reuse_run_id == '' && (inputs.force_codegen || steps.cache-generated.outputs.cache-hit != 'true') }}
         run: |
           mkdir -p out/logs
           sdk/out/linux-amd64/rexglue --log-level info \
@@ -154,6 +203,12 @@ jobs:
         # NOTE: the diagnostic manifest is what app/CMakeLists.txt defaults to
         # and is the one that passes validation. RC97 optimisations
         # (directas_ds2.py / novolatile.py / cr_as_local) are a later pass.
+
+      - name: Verify generated code
+        run: |
+          test -f "$GENERATED_DIR/sources.cmake"
+          echo "generated C++ files: $(find "$GENERATED_DIR" -type f | wc -l)"
+          du -sh "$GENERATED_DIR"
 
       - name: Upload generated code (PRIVATE artifact)
         uses: actions/upload-artifact@v4
@@ -197,13 +252,24 @@ jobs:
       - name: Re-apply iOS patches (idempotent)
         run: python3 ios_port/tools/apply_ios_patches.py . | tail -3
 
+      - name: Cache MoltenVK iOS static library
+        id: cache-moltenvk
+        uses: actions/cache@v4
+        with:
+          path: /tmp/moltenvk
+          key: moltenvk-ios-v1.4.2-v1
+
       - name: MoltenVK iOS static library
         run: |
           # MoltenVK-ios.tar ships MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a
-          curl -L --fail -o /tmp/MoltenVK-ios.tar \
-            "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar"
-          mkdir -p /tmp/moltenvk
-          tar -xf /tmp/MoltenVK-ios.tar -C /tmp/moltenvk
+          if [ ! -f /tmp/moltenvk/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a ]; then
+            curl -L --fail -o /tmp/MoltenVK-ios.tar \
+              "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar"
+            mkdir -p /tmp/moltenvk
+            tar -xf /tmp/MoltenVK-ios.tar -C /tmp/moltenvk
+          else
+            echo "MoltenVK restored from cache"
+          fi
           XCFW="$(find /tmp/moltenvk -name MoltenVK.xcframework -maxdepth 6 | head -1)"
           test -n "$XCFW"
           echo "MOLTENVK_XCFW=$XCFW" >> "$GITHUB_ENV"
@@ -225,7 +291,11 @@ jobs:
 
       - name: Build Mach-O
         run: |
-          cmake --build out/app-ios --config Release --target ds2 -- -jobs 4
+          # Keep compiling after the first error so one CI run reports every
+          # broken translation unit instead of one error per 15-minute cycle.
+          JOBS="$(sysctl -n hw.ncpu)"
+          cmake --build out/app-ios --config Release --target ds2 -- \
+            -jobs "$JOBS" -continueBuildingAfterErrors
           find out/app-ios -name ds2 -type f -perm -111 -exec ls -la {} \;
 
       - name: Upload Mach-O

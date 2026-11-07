@@ -27,16 +27,16 @@
 
 REXCVAR_DEFINE_BOOL(vulkan_log_debug_messages, true, "UI/Vulkan", "Log Vulkan debug messages");
 
-#if REX_PLATFORM_SWITCH
-// NVK for Horizon is linked statically (Mesa's libvulkan.a) and exports the
-// entry points directly. api.h defines VK_NO_PROTOTYPES, so they have to be
-// declared by hand.
+#if REX_PLATFORM_SWITCH || REX_PLATFORM_IOS
+// NVK for Horizon (Mesa's libvulkan.a) and MoltenVK for iOS (libMoltenVK.a)
+// are linked statically and export the entry points directly. api.h defines
+// VK_NO_PROTOTYPES, so they have to be declared by hand.
 extern "C" {
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char* pName);
 VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(VkInstance instance,
                                              const VkAllocationCallbacks* pAllocator);
 }
-#endif  // REX_PLATFORM_SWITCH
+#endif  // REX_PLATFORM_SWITCH || REX_PLATFORM_IOS
 
 namespace rex {
 namespace ui {
@@ -100,7 +100,8 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
   }
 #endif
 
-#if !REX_PLATFORM_SWITCH
+#if !REX_PLATFORM_SWITCH && !REX_PLATFORM_IOS
+// iOS / Switch already filled these two from the statically linked runtime.
 #define XE_VULKAN_LOAD_LOADER_FUNCTION(name) \
   functions_loaded &= (ifn.name = vulkan_instance->loader_.GetSymbol<PFN_##name>(#name)) != nullptr;
   XE_VULKAN_LOAD_LOADER_FUNCTION(vkGetInstanceProcAddr);
