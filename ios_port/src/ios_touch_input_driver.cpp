@@ -180,9 +180,9 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
         case SDL_GAMEPAD_AXIS_RIGHTX: state_.rx = v; break;
         case SDL_GAMEPAD_AXIS_RIGHTY: state_.ry = static_cast<int16_t>(-v); break;
         case SDL_GAMEPAD_AXIS_LEFT_TRIGGER:
-          state_.lt = static_cast<uint8_t>(std::max(0, v) >> 7); break;
+          state_.lt = static_cast<uint8_t>(std::max<int16_t>(0, v) >> 7); break;
         case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:
-          state_.rt = static_cast<uint8_t>(std::max(0, v) >> 7); break;
+          state_.rt = static_cast<uint8_t>(std::max<int16_t>(0, v) >> 7); break;
         default: break;
       }
       mark();
@@ -254,7 +254,7 @@ X_RESULT IosTouchInputDriver::GetDeviceCapabilities(DeviceId id, uint32_t,
                                                     X_INPUT_CAPABILITIES* out_caps) {
   if (id != kDeviceId) return X_ERROR_DEVICE_NOT_CONNECTED;
   std::memset(out_caps, 0, sizeof(*out_caps));
-  out_caps->type = XINPUT_DEVTYPE_GAMEPAD;
+  out_caps->type = rex::input::XINPUT_DEVTYPE_GAMEPAD;
   out_caps->sub_type = 1;  // XINPUT_DEVSUBTYPE_GAMEPAD
   out_caps->flags = rex::input::X_INPUT_CAPS_FFB_SUPPORTED | rex::input::X_INPUT_CAPS_WIRELESS;
   out_caps->gamepad.buttons = 0xF3FF;
