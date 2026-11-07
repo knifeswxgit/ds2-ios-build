@@ -8,7 +8,7 @@
 #include <rex/platform.h>
 #if REX_PLATFORM_IOS
 #include <memory>
-#include "ds2_ios/spvz_reader.h"
+#include "spvz_reader.h"
 #endif
 
 #include <rex/graphics/pipeline/shader/spirv.h>

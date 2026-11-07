@@ -104,9 +104,9 @@ hunk("sdk/include/rex/graphics/pipeline/shader/spirv_library.h",
 #include <rex/platform.h>
 #if REX_PLATFORM_IOS
 #include <memory>
-#include "ds2_ios/spvz_reader.h"
+#include "spvz_reader.h"
 #endif
-""", "spirv_library.h: compressed reader include", "ds2_ios/spvz_reader.h")
+""", "spirv_library.h: compressed reader include", '#include "spvz_reader.h"')
 
 hunk("sdk/include/rex/graphics/pipeline/shader/spirv_library.h",
 """  std::map<Key, uint64_t> entries_;
