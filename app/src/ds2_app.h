@@ -83,7 +83,13 @@ class Ds2App : public rex::ReXApp {
    */
   static void ResolveShaderLibrary() {
     if (rex::cvar::GetFlagInfo("ds2_shader_library") == nullptr) return;
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    // The 501 MiB compressed shader pack is copied into Documents via Files,
+    // together with game_root/. It never goes through GitHub or the .ipa.
+    const auto dir = ds2_ios::DocumentsPath();
+#else
     const auto dir = rex::filesystem::GetExecutableFolder();
+#endif
     if (dir.empty()) return;
     std::error_code ec;
     auto usable = [](const std::filesystem::path& p) {
