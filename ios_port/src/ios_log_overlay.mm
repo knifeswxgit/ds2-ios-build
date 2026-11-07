@@ -248,6 +248,26 @@ void InstallLogSink() {
   });
 }
 
+void DebugMark(const char* stage) {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  if (!g_file) {
+    NSString* docs = [NSString stringWithUTF8String:DocumentsPath().string().c_str()];
+    NSString* path = [docs stringByAppendingPathComponent:@"ds2_log.txt"];
+    NSDictionary* attrs = [NSFileManager.defaultManager attributesOfItemAtPath:path error:nil];
+    if (attrs && [attrs fileSize] > kMaxFileBytes) {
+      [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+    }
+    g_file = fopen(path.UTF8String, "a");
+    if (g_file) setvbuf(g_file, nullptr, _IOFBF, 64 * 1024);
+  }
+  time_t now = time(nullptr);
+  char stamp[32];
+  strftime(stamp, sizeof(stamp), "%H:%M:%S", localtime(&now));
+  std::string line = std::string("[") + stamp + "] [mark] " + stage;
+  AppendLineLocked(line);
+  if (g_file) fflush(g_file);
+}
+
 void InstallLogOverlay() {
   if (g_overlay_installed) return;
   g_overlay_installed = true;

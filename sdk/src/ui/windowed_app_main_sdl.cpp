@@ -26,6 +26,10 @@
 // SDL3-iOS owns UIApplicationMain. SDL_main.h renames our main() to SDL_main
 // and supplies the real entry point that calls SDL_RunApp / UIKit startup.
 #include <SDL3/SDL_main.h>
+#include "ds2_ios/ios_log_overlay.h"
+#define DS2_MARK(stage) ds2_ios::DebugMark(stage)
+#else
+#define DS2_MARK(stage) ((void)0)
 #endif
 
 #if REX_PLATFORM_WIN32
@@ -44,15 +48,19 @@ namespace {
 
 int RunWindowedApp(int argc, char** argv) {
   auto remaining = rex::cvar::Init(argc, argv);
+  DS2_MARK("main: cvars ok");
   rex::cvar::ApplyEnvironment();
   rex::InitLoggingEarly();
+  DS2_MARK("main: early logging ok");
 
   int result;
   {
     rex::ui::SDLWindowedAppContext app_context;
+    DS2_MARK("main: initializing SDL context");
     if (!app_context.Initialize()) {
       return EXIT_FAILURE;
     }
+    DS2_MARK("main: SDL context ready");
 
 #if REX_PLATFORM_WIN32
     // Apartment-threaded COM for shell dialogs.
@@ -62,6 +70,7 @@ int RunWindowedApp(int argc, char** argv) {
 #endif
 
     std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);
+    DS2_MARK("main: app object created");
 
     // Match remaining positional args to the app's expected options.
     const auto& option_names = app->GetPositionalOptions();
@@ -72,7 +81,9 @@ int RunWindowedApp(int argc, char** argv) {
     }
     app->SetParsedArguments(std::move(parsed));
 
+    DS2_MARK("main: calling OnInitialize");
     result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+    DS2_MARK("main: message loop finished");
 
     app->InvokeOnDestroy();
   }

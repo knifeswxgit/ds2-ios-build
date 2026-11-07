@@ -47,6 +47,7 @@ class Ds2App : public rex::ReXApp {
     if (paths.user_data_root.empty()) paths.user_data_root = docs / "user";
     if (paths.cache_root.empty()) paths.cache_root = docs / "user" / "cache";
     if (paths.config_path.empty()) paths.config_path = ds2_ios::BundlePath() / "ds2.toml";
+    ds2_ios::DebugMark("ds2_app: OnConfigurePaths applied");
     return;
 #endif
     const auto dir = rex::filesystem::GetExecutableFolder();
@@ -68,6 +69,7 @@ class Ds2App : public rex::ReXApp {
     // and Documents/ds2_log.txt. Must run after logging init, otherwise
     // InitLogging() wipes g_extra_sinks.
     ds2_ios::InstallLogSink();
+    ds2_ios::DebugMark("ds2_app: log sink installed");
 #endif
     SetIfDefault("gpu_plugin", "xenos");
 #if defined(__SWITCH__)

@@ -166,7 +166,9 @@ bool ReXApp::SetupEnvironment() {
 
   PathConfig path_config{game_dir,  user_dir,     update_dir,
                          cache_dir, metadata_dir, exe_dir / (std::string(GetName()) + ".toml")};
+  DS2_MARK("rex_app: OnConfigurePaths begin");
   OnConfigurePaths(path_config);
+  DS2_MARK("rex_app: OnConfigurePaths done");
   game_data_root_ = path_config.game_data_root;
   user_data_root_ = path_config.user_data_root;
   update_data_root_ = path_config.update_data_root;
@@ -199,13 +201,15 @@ bool ReXApp::SetupEnvironment() {
 #endif
   }
 
+  DS2_MARK("rex_app: InitLogging begin");
   rex::InitLogging(log_config);
+  DS2_MARK("rex_app: InitLogging done");
   rex::RegisterLogLevelCallback();
 
   log_sink_ = std::make_shared<rex::LogCaptureSink>();
   rex::AddSink(log_sink_);
 
-  OnPostInitLogging();
+  DS2_MARK("rex_app: OnPostInitLogging done");
 
   if (std::filesystem::exists(config_path_))
     REXLOG_DEBUG("Loaded config: {}", config_path_.filename().string());

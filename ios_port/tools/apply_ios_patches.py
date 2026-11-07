@@ -788,6 +788,111 @@ hunk("app/CMakeLists.txt",
 """, "app cmake: compile the log overlay", 'ios_log_overlay.mm')
 
 
+# --- startup milestones: find where a black-screen launch stalls -----------
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""#if REX_PLATFORM_IOS
+// SDL3-iOS owns UIApplicationMain. SDL_main.h renames our main() to SDL_main
+// and supplies the real entry point that calls SDL_RunApp / UIKit startup.
+#include <SDL3/SDL_main.h>
+#endif
+""",
+"""#if REX_PLATFORM_IOS
+// SDL3-iOS owns UIApplicationMain. SDL_main.h renames our main() to SDL_main
+// and supplies the real entry point that calls SDL_RunApp / UIKit startup.
+#include <SDL3/SDL_main.h>
+#include "ds2_ios/ios_log_overlay.h"
+#define DS2_MARK(stage) ds2_ios::DebugMark(stage)
+#else
+#define DS2_MARK(stage) ((void)0)
+#endif
+""", "windowed_app_main_sdl: overlay include + DS2_MARK", "#define DS2_MARK(stage)")
+
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""  auto remaining = rex::cvar::Init(argc, argv);
+  rex::cvar::ApplyEnvironment();
+  rex::InitLoggingEarly();
+
+  int result;
+  {
+    rex::ui::SDLWindowedAppContext app_context;
+    if (!app_context.Initialize()) {
+      return EXIT_FAILURE;
+    }
+""",
+"""  auto remaining = rex::cvar::Init(argc, argv);
+  DS2_MARK("main: cvars ok");
+  rex::cvar::ApplyEnvironment();
+  rex::InitLoggingEarly();
+  DS2_MARK("main: early logging ok");
+
+  int result;
+  {
+    rex::ui::SDLWindowedAppContext app_context;
+    DS2_MARK("main: initializing SDL context");
+    if (!app_context.Initialize()) {
+      return EXIT_FAILURE;
+    }
+    DS2_MARK("main: SDL context ready");
+""", "windowed_app_main_sdl: milestones 1", '"main: SDL context ready"')
+
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""    std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);
+""",
+"""    std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);
+    DS2_MARK("main: app object created");
+""", "windowed_app_main_sdl: milestones 2", '"main: app object created"')
+
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""    result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+""",
+"""    DS2_MARK("main: calling OnInitialize");
+    result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+    DS2_MARK("main: message loop finished");
+""", "windowed_app_main_sdl: milestones 3", '"main: calling OnInitialize"')
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""  OnConfigurePaths(path_config);
+""",
+"""  DS2_MARK("rex_app: OnConfigurePaths begin");
+  OnConfigurePaths(path_config);
+  DS2_MARK("rex_app: OnConfigurePaths done");
+""", "rex_app: OnConfigurePaths milestones", '"rex_app: OnConfigurePaths done"')
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""  rex::InitLogging(log_config);
+  rex::RegisterLogLevelCallback();
+""",
+"""  DS2_MARK("rex_app: InitLogging begin");
+  rex::InitLogging(log_config);
+  DS2_MARK("rex_app: InitLogging done");
+  rex::RegisterLogLevelCallback();
+""", "rex_app: InitLogging milestones", '"rex_app: InitLogging done"')
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""  OnPostInitLogging();
+""",
+"""  DS2_MARK("rex_app: OnPostInitLogging done");
+""", "rex_app: OnPostInitLogging milestone", '"rex_app: OnPostInitLogging done"')
+
+hunk("app/src/ds2_app.h",
+"""    if (paths.config_path.empty()) paths.config_path = ds2_ios::BundlePath() / "ds2.toml";
+    return;
+""",
+"""    if (paths.config_path.empty()) paths.config_path = ds2_ios::BundlePath() / "ds2.toml";
+    ds2_ios::DebugMark("ds2_app: OnConfigurePaths applied");
+    return;
+""", "ds2_app.h: OnConfigurePaths milestone", '"ds2_app: OnConfigurePaths applied"')
+
+hunk("app/src/ds2_app.h",
+"""    ds2_ios::InstallLogSink();
+#endif
+""",
+"""    ds2_ios::InstallLogSink();
+    ds2_ios::DebugMark("ds2_app: log sink installed");
+#endif
+""", "ds2_app.h: log sink milestone", '"ds2_app: log sink installed"')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")

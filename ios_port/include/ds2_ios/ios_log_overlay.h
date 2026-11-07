@@ -16,4 +16,8 @@ void InstallLogSink();
 // window; retries on the main queue until one exists. Idempotent.
 void InstallLogOverlay();
 
+// Append "[mark] <stage>" to ds2_log.txt + the overlay buffer. Safe to call
+// from anywhere at any time - it is how we find where startup stalls.
+void DebugMark(const char* stage);
+
 }  // namespace ds2_ios
