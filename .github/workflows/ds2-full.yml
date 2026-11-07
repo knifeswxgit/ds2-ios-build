@@ -99,6 +99,7 @@ jobs:
           cmake -S sdk -B out/sdk-host -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_FLAGS=-march=x86-64-v3 -DCMAKE_CXX_FLAGS=-march=x86-64-v3 \
             -DREXGLUE_BUILD_TESTS=OFF \
             -DREXGLUE_ENABLE_TRACY=OFF \
             -DREXGLUE_ENABLE_PERF_COUNTERS=OFF \
