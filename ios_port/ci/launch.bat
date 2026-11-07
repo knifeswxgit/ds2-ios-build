@@ -106,7 +106,7 @@ gh workflow run ds2-full.yml --repo "%SLUG%" -f asset_release=%RELEASE_TAG% -f d
 if errorlevel 1 goto :fail
 ping -n 7 127.0.0.1 >nul
 set "RUN_ID="
-for /f "delims=" %%R in ('gh run list --workflow=ds2-full.yml --repo "%SLUG%" --limit 1 --json databaseId --jq ".[0].databaseId"') do set "RUN_ID=%%R"
+for /f "delims=" %%R in ('gh run list --workflow=ds2-full.yml --repo "%SLUG%" --limit 1 --json databaseId --jq .[0].databaseId') do set "RUN_ID=%%R"
 if "!RUN_ID!"=="" (
   echo [X] could not determine run id
   goto :fail
