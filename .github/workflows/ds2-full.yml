@@ -44,6 +44,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache clang-20 toolchain
+        id: cache-clang
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/llvm-20
+          key: llvm-20-noble-${{ runner.os }}-v1
+
       - name: Host toolchain
         run: |
           sudo apt-get update -qq
@@ -57,11 +64,15 @@ jobs:
             libasound2-dev libdbus-1-dev libudev-dev
           # ReXGlue is C++23 (std::expected); Ubuntu 24.04's clang 18 is too old.
           # app/CMakeLists.txt documents clang-20 as the supported host compiler.
-          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh 20 all 2>&1 | tail -3
-          sudo update-alternatives --install /usr/bin/clang clang /usr/lib/llvm-20/bin/clang 100
-          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/lib/llvm-20/bin/clang++ 100
+          if [ ! -x /usr/lib/llvm-20/bin/clang++ ]; then
+            wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+            chmod +x /tmp/llvm.sh
+            sudo /tmp/llvm.sh 20 2>&1 | tail -3
+          else
+            echo "clang-20 restored from cache"
+          fi
+          sudo update-alternatives --install /usr/bin/clang clang /usr/lib/llvm-20/bin/clang 100 >/dev/null
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/lib/llvm-20/bin/clang++ 100 >/dev/null
           clang++ --version | head -1
 
       - name: Cache ReXGlue third-party sources
@@ -101,6 +112,17 @@ jobs:
           echo "Default.xex $(stat -c%s assets/game_root/Default.xex) bytes"
           # If codegen asks for more of game_root, add those small files to the
           # same private release (see ios_port/ci/PRIVATE_ASSETS.md).
+
+      # Incremental rebuilds: ninja only recompiles what changed between runs.
+      - name: Cache codegen build tree
+        uses: actions/cache@v4
+        with:
+          path: |
+            out/sdk-host
+            sdk/out
+          key: rexglue-build-linux-v1
+          restore-keys: |
+            rexglue-build-linux-
 
       - name: Build the rexglue codegen CLI (SDK only, no game code needed)
         run: |
