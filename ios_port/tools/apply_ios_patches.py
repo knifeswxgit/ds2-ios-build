@@ -981,6 +981,49 @@ hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
 """, "sdlctx: fine marks in Initialize", 'DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)")')
 
 
+hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
+"""  DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
+""",
+"""  {
+    std::string drivers;
+    for (int i = 0; i < SDL_GetNumVideoDrivers(); ++i) {
+      const char* d = SDL_GetVideoDriver(i);
+      if (d) drivers += (drivers.empty() ? "" : ",") + std::string(d);
+    }
+    DS2_CTX_MARK("sdlctx: compiled video drivers: " + drivers);
+  }
+  DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
+""", "sdlctx: compiled drivers list", 'sdlctx: compiled video drivers')
+
+hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
+"""    REXLOG_ERROR("SDL_InitSubSystem(SDL_INIT_VIDEO) failed: {}", SDL_GetError());
+    return false;
+""",
+"""    REXLOG_ERROR("SDL_InitSubSystem(SDL_INIT_VIDEO) failed: {}", SDL_GetError());
+    DS2_CTX_MARK(std::string("sdlctx: VIDEO INIT FAILED: ") + SDL_GetError());
+    return false;
+""", "sdlctx: failure mark", 'VIDEO INIT FAILED')
+
+
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""    if (!app_context.Initialize()) {
+      return EXIT_FAILURE;
+    }
+""",
+"""    if (!app_context.Initialize()) {
+      DS2_MARK("main: app_context.Initialize FAILED");
+      return EXIT_FAILURE;
+    }
+""", "main: mark Initialize failure", 'app_context.Initialize FAILED')
+
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""    result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+""",
+"""    result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+    DS2_MARK("main: RunMainMessageLoop returned");
+""", "main: mark loop return", 'RunMainMessageLoop returned')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")

@@ -330,7 +330,8 @@ void HangWatchdogTick() {
   auto idle = std::chrono::steady_clock::now() - g_last_real_mark;
   if (idle < std::chrono::seconds(25)) return;
   // dump every ~30s while the hang persists (heartbeat = 5s, dump on 5th)
-  if (++g_hang_dumps % 6 != 1) return;
+  if (g_hang_dumps >= 6) return;  // enough evidence collected
+  ++g_hang_dumps;
   DumpThreadStack(g_main_thread, "no main-thread progress for 25s+");
 }
 

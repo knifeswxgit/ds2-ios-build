@@ -58,6 +58,7 @@ int RunWindowedApp(int argc, char** argv) {
     rex::ui::SDLWindowedAppContext app_context;
     DS2_MARK("main: initializing SDL context");
     if (!app_context.Initialize()) {
+      DS2_MARK("main: app_context.Initialize FAILED");
       return EXIT_FAILURE;
     }
     DS2_MARK("main: SDL context ready");
@@ -83,6 +84,7 @@ int RunWindowedApp(int argc, char** argv) {
 
     DS2_MARK("main: calling OnInitialize");
     result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+    DS2_MARK("main: RunMainMessageLoop returned");
     DS2_MARK("main: message loop finished");
 
     app->InvokeOnDestroy();
