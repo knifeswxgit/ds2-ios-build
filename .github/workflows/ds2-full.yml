@@ -346,6 +346,24 @@ jobs:
           test -f out/app-ios/ds2.xcodeproj/project.pbxproj
           echo "Xcode project restored from cache; configure skipped"
 
+      # GitHub checkout refreshes every file's mtime, and the generated-code
+      # artifact is extracted fresh too, so Xcode would rebuild ALL ~340 TUs
+      # every run. Reset every source mtime to the HEAD commit time, then give
+      # the files actually changed by that commit a current time: Xcode now
+      # rebuilds only the changed translation units.
+      - name: Normalize source mtimes for incremental Xcode builds
+        run: |
+          CT=$(git log -1 --format=%ct)
+          find app sdk ios_port app/generated -type f \
+            \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.mm' \
+               -o -name '*.m' -o -name '*.c' -o -name '*.cmake' \
+               -o -name 'CMakeLists.txt' \) -print0 \
+            | xargs -0 touch -d "@$CT" 2>/dev/null || true
+          git diff-tree --no-commit-id --name-only -r HEAD | while read -r f; do
+            [ -f "$f" ] && touch "$f"
+          done
+          echo "mtimes normalized to commit time $CT"
+
       - name: Build Mach-O
         run: |
           echo "--- ccache diag ---"
