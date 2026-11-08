@@ -329,7 +329,7 @@ jobs:
             -DREXGLUE_ENABLE_TRACY=OFF \
             -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include -I$MOLTENVK_INCLUDE" \
             -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface" \
-            ${{ inputs.use_ccache && '-DCMAKE_XCODE_ATTRIBUTE_CC="ccache clang" -DCMAKE_XCODE_ATTRIBUTE_CXX="ccache clang++"' || '' }}
+            ${{ inputs.use_ccache && '-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache' || '' }}
 
       - name: Use cached Xcode project (skip 3-minute reconfigure)
         if: ${{ !inputs.force_configure && steps.cache-ios-tree.outputs.cache-matched-key != '' }}
