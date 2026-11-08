@@ -912,6 +912,31 @@ hunk("sdk/src/ui/rex_app.cpp",
      "rex_app: DebugMark calls", 'ds2_ios::DebugMark("rex_app:', count=5)
 
 
+# --- sdl context: fine-grained marks inside Initialize ---------------------
+hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
+"""#include <rex/platform.h>
+#include <rex/ui/flags.h>
+#include <rex/ui/window_sdl.h>
+""",
+"""#include <rex/platform.h>
+#include <rex/ui/flags.h>
+#include <rex/ui/window_sdl.h>
+
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#define DS2_CTX_MARK(stage) ds2_ios::DebugMark(stage)
+#else
+#define DS2_CTX_MARK(stage) ((void)0)
+#endif
+""", "sdlctx: DebugMark include", "#define DS2_CTX_MARK")
+
+hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
+"""  DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
+""",
+"""  DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
+""", "sdlctx: marks anchor", 'DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)")')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")

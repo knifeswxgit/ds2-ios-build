@@ -23,6 +23,13 @@
 #include <rex/ui/flags.h>
 #include <rex/ui/window_sdl.h>
 
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#define DS2_CTX_MARK(stage) ds2_ios::DebugMark(stage)
+#else
+#define DS2_CTX_MARK(stage) ((void)0)
+#endif
+
 namespace rex::ui {
 
 SDLWindowedAppContext::~SDLWindowedAppContext() {
@@ -50,23 +57,29 @@ bool SDLWindowedAppContext::Initialize() {
   if (!requested_driver.empty()) {
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, requested_driver.c_str());
   }
+  DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
   if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
     REXLOG_ERROR("SDL_InitSubSystem(SDL_INIT_VIDEO) failed: {}", SDL_GetError());
     return false;
   }
   const char* video_driver_in_use = SDL_GetCurrentVideoDriver();
+  DS2_CTX_MARK(video_driver_in_use
+                   ? ("sdlctx: video ok, driver=" + std::string(video_driver_in_use)).c_str()
+                   : "sdlctx: video ok, driver=unknown");
   REXLOG_INFO("SDL video driver: {}", video_driver_in_use ? video_driver_in_use : "unknown");
   uint32_t first = SDL_RegisterEvents(2);
   if (first == 0) {
     REXLOG_ERROR("SDL_RegisterEvents failed: {}", SDL_GetError());
     return false;
   }
+  DS2_CTX_MARK("sdlctx: events registered");
   wakeup_event_type_ = first;
   paint_event_type_ = first + 1;
   if (!SDL_AddEventWatch(WatchEvent, this)) {
     REXLOG_ERROR("SDL_AddEventWatch failed: {}", SDL_GetError());
     return false;
   }
+  DS2_CTX_MARK("sdlctx: event watch ok");
   event_watch_registered_ = true;
   return true;
 }

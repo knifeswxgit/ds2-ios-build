@@ -16,6 +16,8 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include <thread>
+#include <chrono>
 
 #include <rex/logging/api.h>
 
@@ -266,6 +268,20 @@ void DebugMark(const char* stage) {
   std::string line = std::string("[") + stamp + "] [mark] " + stage;
   AppendLineLocked(line);
   if (g_file) fflush(g_file);
+
+  // Once the first mark lands, start a background heartbeat: if the main
+  // thread wedges inside some init call, heartbeats keep appearing and prove
+  // the process itself is alive (vs suspended by the system).
+  static std::once_flag hb_flag;
+  std::call_once(hb_flag, [] {
+    std::thread([] {
+      int n = 0;
+      for (;;) {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        DebugMark(("heartbeat " + std::to_string(++n)).c_str());
+      }
+    }).detach();
+  });
 }
 
 void InstallLogOverlay() {
