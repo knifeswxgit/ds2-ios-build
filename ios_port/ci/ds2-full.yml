@@ -196,10 +196,13 @@ jobs:
 
       - name: Build .ipa with our own packer (no Xcode here)
         run: |
+          # OnConfigurePaths looks for "ds2.toml" inside the .app bundle.
+          # Packing it under its source name leaves the build without a config.
+          cp ios_port/out/ds2_ios.toml ds2.toml
           python3 ios_port/tools/mkipa.py \
             --executable "$EXE" \
             --plist ios_port/Info.plist \
-            --resource ios_port/out/ds2_ios.toml \
+            --resource ds2.toml \
             --resource build/assets/ds2_shaders.spvz \
             --resource build/assets/ds2_shaders.spvz.idx \
             --out ds2-ios.ipa \
