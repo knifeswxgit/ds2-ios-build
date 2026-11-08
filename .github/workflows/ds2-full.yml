@@ -350,10 +350,13 @@ jobs:
             -DREXGLUE_ENABLE_TRACY=OFF \
             -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include -I$MOLTENVK_INCLUDE" \
             -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface" \
-            ${{ inputs.use_ccache && '-DCMAKE_XCODE_ATTRIBUTE_CC="ccache clang" -DCMAKE_XCODE_ATTRIBUTE_CXX="ccache clang++"' || '-DCMAKE_XCODE_ATTRIBUTE_CC=clang -DCMAKE_XCODE_ATTRIBUTE_CXX=clang++' }}
-          # A stale CMakeCache.txt can carry CC="ccache clang" from an older
-          # use_ccache=true run; Xcode then fails to spawn 'ccache clang'. The
-          # explicit -D above always overrides the cached value.
+            -DCMAKE_XCODE_ATTRIBUTE_CC=clang -DCMAKE_XCODE_ATTRIBUTE_CXX=clang++
+          # Plain clang only: CMAKE_XCODE_ATTRIBUTE_CC="ccache clang" makes
+          # Xcode try to spawn a binary literally named 'ccache clang', which
+          # never exists -> every thirdparty target fails to compile. ccache
+          # never provided hits here anyway (tiny cold cache, stats zeroed).
+          # A stale CMakeCache.txt cannot resurrect ccache: the explicit -D
+          # always overrides cached values.
           echo "$CMAKE_INPUTS_HASH" > out/app-ios/.cmake_inputs_hash
 
       - name: Use cached Xcode project (skip 3-minute reconfigure)
