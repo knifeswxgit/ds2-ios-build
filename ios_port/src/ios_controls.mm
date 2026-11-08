@@ -21,6 +21,33 @@
 #include "ds2_ios/ios_log_overlay.h"
 
 namespace ds2_ios {
+void RelayoutZoneViews();  // defined below, in the namespace
+}  // namespace ds2_ios
+
+// ObjC class declarations must live at global scope - never inside a C++
+// namespace ("Objective-C declarations may only appear in global scope").
+// Block-based target/action bridge for UIButton + gesture recognizers.
+@interface DS2BlockAction : NSObject
+@property(nonatomic, copy) void (^block)(id);
+- (void)invoke:(id)sender;
+@end
+@implementation DS2BlockAction
+- (void)invoke:(id)sender {
+  if (self.block) self.block(sender);
+}
+@end
+
+// Root view that re-fits zone frames on rotation/resize.
+@interface DS2ControlsRootView : UIView
+@end
+@implementation DS2ControlsRootView
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  ds2_ios::RelayoutZoneViews();
+}
+@end
+
+namespace ds2_ios {
 
 // ---------------------------------------------------------------------------
 // Default layout (landscape, normalized 0..1). Button masks are
@@ -232,17 +259,7 @@ void HandleZonePan(UIPanGestureRecognizer* pan) {
   if (pan.state == UIGestureRecognizerStateEnded) PersistZones();
 }
 
-// Block-based target/action bridge (UIButton + gesture recognizers).
-@interface DS2BlockAction : NSObject
-@property(nonatomic, copy) void (^block)(id);
-- (void)invoke:(id)sender;
-@end
-@implementation DS2BlockAction
-- (void)invoke:(id)sender {
-  if (self.block) self.block(sender);
-}
-@end
-
+// Block-action helpers (the DS2BlockAction class itself is at global scope).
 DS2BlockAction* BlockAction(void (^blk)(id)) {
   DS2BlockAction* a = [[DS2BlockAction alloc] init];
   a.block = blk;
@@ -349,16 +366,6 @@ void ResetTouchZones() {
 }
 
 void RelayoutZoneViews() { LayoutZoneViews(); }
-
-// Root view that re-fits zone frames on rotation/resize.
-@interface DS2ControlsRootView : UIView
-@end
-@implementation DS2ControlsRootView
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  ds2_ios::RelayoutZoneViews();
-}
-@end
 
 // ---------------------------------------------------------------------------
 // Public API
