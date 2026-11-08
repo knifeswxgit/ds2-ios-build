@@ -484,6 +484,9 @@ jobs:
             git add gbox/ds2.appsrc
             git commit -m "gbox: bump source to $VER [skip ci]"
             git push
+            # jsDelivr caches branch refs ~12h; purge so GBox sees the bump now
+            curl -s -o /dev/null "https://purge.jsdelivr.net/gh/$GITHUB_REPOSITORY@main/gbox/ds2.appsrc" || true
+            curl -s -o /dev/null "https://purge.jsdelivr.net/gh/$GITHUB_REPOSITORY@main/gbox/icon.png" || true
           fi
 
 # KNOWN INTEGRATION ITEMS (will surface on the first build):
