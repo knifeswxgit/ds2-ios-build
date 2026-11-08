@@ -10,6 +10,9 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
+#include <mach/mach.h>
+#include <dlfcn.h>
+
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/spdlog.h>
 
@@ -250,6 +253,87 @@ void InstallLogSink() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Hang watchdog: if the main thread stops making progress, dump its stack.
+// ---------------------------------------------------------------------------
+
+mach_port_t g_main_thread = MACH_PORT_NULL;
+std::chrono::steady_clock::time_point g_last_real_mark;
+int g_hang_dumps = 0;
+
+// Walk the arm64 frame-pointer chain of `thread` and log each return address
+// with dladdr symbolication. Reads the target's stack through vm_read, so it
+// is safe from another thread.
+void DumpThreadStack(mach_port_t thread, const char* why) {
+  char stamp[32];
+  time_t now = time(nullptr);
+  strftime(stamp, sizeof(stamp), "%H:%M:%S", localtime(&now));
+
+  kern_return_t kr = thread_suspend(thread);
+  if (kr != KERN_SUCCESS && kr != KERN_ALREADY_SUSPENDED && kr != KERN_TERMINATED) {
+    AppendLineLocked(std::string("[") + stamp + "] [hang] thread_suspend failed: " +
+                     std::to_string(kr));
+    return;
+  }
+
+  arm_unified_thread_state_t state{};
+  mach_msg_type_number_t count = ARM_UNIFIED_THREAD_STATE_COUNT;
+  kr = thread_get_state(thread, ARM_UNIFIED_THREAD_STATE, (thread_state_t)&state, &count);
+  if (kr != KERN_SUCCESS) {
+    AppendLineLocked(std::string("[") + stamp + "] [hang] thread_get_state failed: " +
+                     std::to_string(kr));
+    if (kr != KERN_TERMINATED) thread_resume(thread);
+    return;
+  }
+
+  uint64_t pc = state.ts_64.__pc;
+  uint64_t fp = state.ts_64.__fp;
+  AppendLineLocked(std::string("[") + stamp + "] [hang] " + why +
+                   " — main thread stack (pc=0x" + [](uint64_t v) {
+                     char b[24]; snprintf(b, sizeof(b), "%llx", (unsigned long long)v); return std::string(b);
+                   }(pc) + "):");
+
+  for (int i = 0; i < 64 && fp != 0; ++i) {
+    // arm64 frame: [fp] = next fp, [fp+8] = return address
+    uint64_t buf[2] = {0, 0};
+    vm_size_t got = 0;
+    kr = vm_read_overwrite(mach_task_self(), (vm_address_t)fp, sizeof(buf),
+                           (vm_address_t)buf, &got);
+    if (kr != KERN_SUCCESS || got != sizeof(buf)) break;
+    uint64_t lr = buf[1];
+
+    Dl_info info{};
+    std::string sym = "0x" + [](uint64_t v) {
+      char b[24]; snprintf(b, sizeof(b), "%llx", (unsigned long long)v); return std::string(b);
+    }(lr);
+    if (dladdr((const void*)lr, &info) && info.dli_sname) {
+      sym = std::string(info.dli_sname) + " + " +
+            std::to_string((long)(lr - (uint64_t)info.dli_saddr));
+    } else if (info.dli_fname) {
+      sym += " (" + std::string(info.dli_fname) + ")";
+    }
+    AppendLineLocked("    #" + std::to_string(i) + " " + sym);
+
+    if (buf[0] <= fp) break;  // fp chain must move upward
+    fp = buf[0];
+  }
+
+  if (kr == KERN_SUCCESS || kr == KERN_ALREADY_SUSPENDED) thread_resume(thread);
+  AppendLineLocked(std::string("[") + stamp + "] [hang] stack dump end");
+  if (g_file) fflush(g_file);
+}
+
+void HangWatchdogTick() {
+  // Called from the heartbeat thread only. Heartbeat marks never refresh
+  // g_last_real_mark, so a stuck main thread is detected here.
+  if (g_main_thread == MACH_PORT_NULL) return;
+  auto idle = std::chrono::steady_clock::now() - g_last_real_mark;
+  if (idle < std::chrono::seconds(25)) return;
+  // dump every ~30s while the hang persists (heartbeat = 5s, dump on 5th)
+  if (++g_hang_dumps % 6 != 1) return;
+  DumpThreadStack(g_main_thread, "no main-thread progress for 25s+");
+}
+
 void DebugMark(const char* stage) {
   std::lock_guard<std::mutex> lock(g_mutex);
   if (!g_file) {
@@ -261,6 +345,21 @@ void DebugMark(const char* stage) {
     }
     g_file = fopen(path.UTF8String, "a");
     if (g_file) setvbuf(g_file, nullptr, _IOFBF, 64 * 1024);
+  }
+  // The very first mark comes from the main() thread; remember its mach port
+  // so the hang watchdog can later dump exactly that thread's stack.
+  if (g_main_thread == MACH_PORT_NULL) {
+    g_main_thread = mach_thread_self();
+  }
+  // Only marks made BY the main thread count as progress; heartbeat marks
+  // arrive from the watchdog thread and must not reset the hang timer.
+  {
+    mach_port_t self_t = mach_thread_self();
+    const bool is_main = (self_t == g_main_thread);
+    mach_port_deallocate(mach_task_self(), self_t);
+    if (is_main) {
+      g_last_real_mark = std::chrono::steady_clock::now();
+    }
   }
   time_t now = time(nullptr);
   char stamp[32];
@@ -279,6 +378,7 @@ void DebugMark(const char* stage) {
       for (;;) {
         std::this_thread::sleep_for(std::chrono::seconds(5));
         DebugMark(("heartbeat " + std::to_string(++n)).c_str());
+        HangWatchdogTick();
       }
     }).detach();
   });
