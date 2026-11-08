@@ -259,6 +259,7 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     return false;
   }
 
+  ds2_ios::DebugMark("cr: game_data_root ok");
   game_data_root_ = paths.game_data_root;
   user_data_root_ = paths.user_data_root;
   update_data_root_ = paths.update_data_root;
@@ -279,7 +280,10 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     runtime_->set_imgui_drawer(imgui_drawer_.get());
   }
 
+  ds2_ios::DebugMark("cr: runtime object created, calling Setup");
   auto status = runtime_->Setup(ppc_info_, std::move(config_));
+  ds2_ios::DebugMark(("cr: Setup returned 0x" +
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
   if (XFAILED(status)) {
     REXLOG_ERROR("Runtime setup failed: {:08X}", status);
     return false;
@@ -310,9 +314,11 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     }
   }
 
+  ds2_ios::DebugMark("cr: input/module hooks ok");
   std::string xex_image = "game:\\default.xex";
   OnLoadXexImage(xex_image);
 
+  ds2_ios::DebugMark("cr: OnLoadXexImage done");
   // Mirrors the game:\ / d:\ -> game_data_root mapping in Runtime::SetupVfs.
   {
     constexpr std::string_view kGameDevice = "game:\\";
@@ -335,6 +341,8 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
   }
 
   status = runtime_->LoadXexImage(xex_image);
+  ds2_ios::DebugMark(("cr: LoadXexImage returned 0x" +
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
   if (XFAILED(status)) {
     auto msg = fmt::format("Failed to load XEX ({}): {:08X}", xex_image, status);
     REXLOG_ERROR("{}", msg);
@@ -351,7 +359,9 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     }
   }
 
+  ds2_ios::DebugMark("cr: calling OnPostSetup");
   OnPostSetup();
+  ds2_ios::DebugMark("cr: OnPostSetup done");
 
   return true;
 }

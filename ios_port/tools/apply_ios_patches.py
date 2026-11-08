@@ -1116,6 +1116,58 @@ hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
 """, "main: split OnInitialize result marks", 'main: OnInitialize returned FALSE')
 
 
+hunk("sdk/src/ui/rex_app.cpp",
+"""  game_data_root_ = paths.game_data_root;""",
+"""  ds2_ios::DebugMark("cr: game_data_root ok");
+  game_data_root_ = paths.game_data_root;""", "cr: game_data_root mark", 'cr: game_data_root ok')
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""  auto status = runtime_->Setup(ppc_info_, std::move(config_));
+  if (XFAILED(status)) {
+    REXLOG_ERROR("Runtime setup failed: {:08X}", status);
+""",
+"""  ds2_ios::DebugMark("cr: runtime object created, calling Setup");
+  auto status = runtime_->Setup(ppc_info_, std::move(config_));
+  ds2_ios::DebugMark(("cr: Setup returned 0x" +
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
+  if (XFAILED(status)) {
+    REXLOG_ERROR("Runtime setup failed: {:08X}", status);
+""", "cr: Setup status mark", 'cr: Setup returned 0x')
+
+XEX_LINE = '  std::string xex_image = "game:' + chr(92) + chr(92) + 'default.xex";'
+hunk("sdk/src/ui/rex_app.cpp",
+XEX_LINE + """
+  OnLoadXexImage(xex_image);
+""",
+'  ds2_ios::DebugMark("cr: input/module hooks ok");' + chr(10) + XEX_LINE + """
+  OnLoadXexImage(xex_image);
+""" + chr(10) + '  ds2_ios::DebugMark("cr: OnLoadXexImage done");', "cr: xex image marks", 'cr: OnLoadXexImage done')
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""  status = runtime_->LoadXexImage(xex_image);
+  if (XFAILED(status)) {""",
+"""  status = runtime_->LoadXexImage(xex_image);
+  ds2_ios::DebugMark(("cr: LoadXexImage returned 0x" +
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
+  if (XFAILED(status)) {""", "cr: LoadXexImage status mark", 'cr: LoadXexImage returned 0x')
+
+hunk("sdk/src/ui/rex_app.cpp",
+"""  OnPostSetup();
+
+  return true;
+}
+
+bool ReXApp::SetupPresentation() {""",
+"""  ds2_ios::DebugMark("cr: calling OnPostSetup");
+  OnPostSetup();
+  ds2_ios::DebugMark("cr: OnPostSetup done");
+
+  return true;
+}
+
+bool ReXApp::SetupPresentation() {""", "cr: OnPostSetup marks", 'cr: OnPostSetup done')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")
