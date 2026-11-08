@@ -63,12 +63,12 @@ bool SDLWindowedAppContext::Initialize() {
       const char* d = SDL_GetVideoDriver(i);
       if (d) drivers += (drivers.empty() ? "" : ",") + std::string(d);
     }
-    DS2_CTX_MARK("sdlctx: compiled video drivers: " + drivers);
+    DS2_CTX_MARK(("sdlctx: compiled video drivers: " + drivers).c_str());
   }
   DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
   if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
     REXLOG_ERROR("SDL_InitSubSystem(SDL_INIT_VIDEO) failed: {}", SDL_GetError());
-    DS2_CTX_MARK(std::string("sdlctx: VIDEO INIT FAILED: ") + SDL_GetError());
+    DS2_CTX_MARK(("sdlctx: VIDEO INIT FAILED: " + std::string(SDL_GetError())).c_str());
     return false;
   }
   const char* video_driver_in_use = SDL_GetCurrentVideoDriver();
