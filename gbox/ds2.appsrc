@@ -1,12 +1,12 @@
 {
-    "version": "1.1.2",
+    "version": "1.1.3",
     "sourceName": "DS2 iOS (knifeswxgit)",
     "sourceAuthor": "knifeswxgit",
     "sourceLinkTitle": "Репозиторий",
     "sourceLinkUrl": "https://github.com/knifeswxgit/ds2-ios-build",
     "sourceImage": "https://cdn.jsdelivr.net/gh/knifeswxgit/ds2-ios-build@main/gbox/icon.png",
-    "sourceUpdateTime": "2026-11-08T17:06:58+0000",
-    "sourceDescription": "Dark Souls II iOS port — свежие сборки автоматически. Установка: скачать, подписать своим Apple ID в GBox, установить. Игровые данные (game_root, ds2_shaders.spvz) заливаются отдельно.",
+    "sourceUpdateTime": "2026-11-08T18:40:05+0000",
+    "sourceDescription": "Dark Souls II iOS port — свежие сборки автоматически. Установка: скачать, подписать своим Apple ID в GBox, установить. Игровые данные (game_root) и DLC заливаются отдельно; сжатый шейдер-пак больше не требуется.",
     "appCategories": [
         "Игры"
     ],
@@ -14,12 +14,12 @@
         {
             "appType": "SELF_SIGN",
             "appCateIndex": 0,
-            "appUpdateTime": "2026-11-08T17:06:58+0000",
+            "appUpdateTime": "2026-11-08T18:40:05+0000",
             "appName": "Dark Souls II",
-            "appVersion": "2026.11.08.1706",
+            "appVersion": "2026.11.09.0140",
             "appImage": "https://cdn.jsdelivr.net/gh/knifeswxgit/ds2-ios-build@main/gbox/icon.png",
-            "appPackage": "https://github.com/knifeswxgit/ds2-ios-build/releases/download/ds2-ios-latest/ds2-ios-2026.11.08.1706.ipa",
-            "appDescription": "Dark Souls II: Scholar of the First Sin — порт для iOS (arm64, MoltenVK). Неподписанный .ipa: скачай из источника, подпиши в GBox своим Apple ID и установи. Логи в игре: 3 тапа по верхней центральной части экрана."
+            "appPackage": "https://github.com/knifeswxgit/ds2-ios-build/releases/download/ds2-ios-latest/ds2-ios-2026.11.09.native.ipa",
+            "appDescription": "Dark Souls II: Scholar of the First Sin — порт для iOS (arm64, MoltenVK). Включён нативный Vulkan-рендерер (внутреннее разрешение 0.75, лимит 30 FPS): на iPhone 11 заметно быстрее классической эмуляции Xenos. Обновление поверх существующей установки сохраняет Documents. Логи: 3 тапа по верхней центральной части экрана."
         }
     ]
 }
