@@ -249,6 +249,16 @@ void InstallLogSink() {
     auto sink = std::make_shared<OverlaySink>();
     sink->set_pattern("[%H:%M:%S.%e] [%l] %v");
     rex::AddSink(sink);
+    // Belt and braces: attach to every spdlog logger that exists (REXLOG uses
+    // per-category loggers created lazily; the registry walk above can miss
+    // ones created after this call, and default_logger may differ).
+    spdlog::apply_all([&](const std::shared_ptr<spdlog::logger>& l) {
+      if (l) l->sinks().push_back(sink);
+    });
+    if (spdlog::default_logger()) {
+      spdlog::default_logger()->sinks().push_back(sink);
+    }
+    spdlog::flush_every(std::chrono::seconds(1));
     g_sink_installed = true;
   });
 }
