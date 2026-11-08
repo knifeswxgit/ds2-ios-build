@@ -270,7 +270,7 @@ void DumpThreadStack(mach_port_t thread, const char* why) {
   strftime(stamp, sizeof(stamp), "%H:%M:%S", localtime(&now));
 
   kern_return_t kr = thread_suspend(thread);
-  if (kr != KERN_SUCCESS && kr != KERN_ALREADY_SUSPENDED && kr != KERN_TERMINATED) {
+  if (kr != KERN_SUCCESS && kr != KERN_TERMINATED) {
     AppendLineLocked(std::string("[") + stamp + "] [hang] thread_suspend failed: " +
                      std::to_string(kr));
     return;
@@ -318,7 +318,7 @@ void DumpThreadStack(mach_port_t thread, const char* why) {
     fp = buf[0];
   }
 
-  if (kr == KERN_SUCCESS || kr == KERN_ALREADY_SUSPENDED) thread_resume(thread);
+  if (kr == KERN_SUCCESS) thread_resume(thread);
   AppendLineLocked(std::string("[") + stamp + "] [hang] stack dump end");
   if (g_file) fflush(g_file);
 }
