@@ -1168,6 +1168,36 @@ bool ReXApp::SetupPresentation() {""",
 bool ReXApp::SetupPresentation() {""", "cr: OnPostSetup marks", 'cr: OnPostSetup done')
 
 
+hunk("sdk/src/system/runtime.cpp",
+"""#include <rex/logging.h>
+""",
+"""#include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+""", "runtime.cpp: DebugMark include", 'ds2_ios/ios_log_overlay.h')
+
+hunk("sdk/src/system/runtime.cpp",
+"""  auto fail = [this](X_STATUS status, std::string_view reason) {
+    REXSYS_ERROR("Runtime::Setup failed: {}", reason);
+    Shutdown();
+    return status;
+  };""",
+"""  auto fail = [this](X_STATUS status, std::string_view reason) {
+    REXSYS_ERROR("Runtime::Setup failed: {}", reason);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    {
+      char hex[12];
+      snprintf(hex, sizeof(hex), "%08X", (uint32_t)status);
+      ds2_ios::DebugMark((std::string("runtime: Setup FAILED: ") + std::string(reason) +
+                          " (0x" + hex + ")").c_str());
+    }
+#endif
+    Shutdown();
+    return status;
+  };""", "runtime.cpp: fail lambda reason mark", 'runtime: Setup FAILED')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")

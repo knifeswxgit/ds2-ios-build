@@ -15,6 +15,9 @@
 #include <rex/filesystem/devices/null_device.h>
 #include <rex/filesystem/vfs.h>
 #include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#endif
 #include <rex/perf/counter.h>
 #include <rex/ppc/context.h>          // PPCFuncMapping
 #include <rex/platform/exceptions.h>  // SEH exception support
@@ -97,6 +100,14 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
 
   auto fail = [this](X_STATUS status, std::string_view reason) {
     REXSYS_ERROR("Runtime::Setup failed: {}", reason);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+    {
+      char hex[12];
+      snprintf(hex, sizeof(hex), "%08X", (uint32_t)status);
+      ds2_ios::DebugMark((std::string("runtime: Setup FAILED: ") + std::string(reason) +
+                          " (0x" + hex + ")").c_str());
+    }
+#endif
     Shutdown();
     return status;
   };
