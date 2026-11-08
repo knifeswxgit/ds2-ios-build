@@ -317,8 +317,27 @@ jobs:
           echo "MOLTENVK_LIB=$LIB" >> "$GITHUB_ENV"
           echo "MOLTENVK_INCLUDE=$INC" >> "$GITHUB_ENV"
 
+      - name: Detect CMake inputs changed
+        id: cmake-inputs
+        run: |
+          # The cached Xcode project cannot see NEW source files added to
+          # CMakeLists.txt (ZERO_CHECK is defeated by the mtime pinning), so
+          # reconfigure whenever any CMake input file content changes.
+          HASH=$(find app sdk ios_port -type f \( -name 'CMakeLists.txt' -o -name '*.cmake' \) \
+                  -not -path '*/out/*' -print0 | sort -z | xargs -0 shasum -a 256 \
+                  | shasum -a 256 | awk '{print $1}')
+          echo "CMAKE_INPUTS_HASH=$HASH" >> "$GITHUB_ENV"
+          if [ -f out/app-ios/.cmake_inputs_hash ] \
+             && [ "$(cat out/app-ios/.cmake_inputs_hash)" = "$HASH" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "CMake inputs unchanged; cached project is authoritative"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "CMake inputs changed (or no stamp); configure will run"
+          fi
+
       - name: Configure iOS
-        if: ${{ inputs.force_configure || steps.cache-ios-tree.outputs.cache-matched-key == '' }}
+        if: ${{ inputs.force_configure || steps.cmake-inputs.outputs.changed == 'true' }}
         run: |
           cmake -S app -B out/app-ios -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/ios_port/cmake/ios-arm64.cmake" \
@@ -332,9 +351,10 @@ jobs:
             -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include -I$MOLTENVK_INCLUDE" \
             -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface" \
             ${{ inputs.use_ccache && '-DCMAKE_XCODE_ATTRIBUTE_CC="ccache clang" -DCMAKE_XCODE_ATTRIBUTE_CXX="ccache clang++"' || '' }}
+          echo "$CMAKE_INPUTS_HASH" > out/app-ios/.cmake_inputs_hash
 
       - name: Use cached Xcode project (skip 3-minute reconfigure)
-        if: ${{ !inputs.force_configure && steps.cache-ios-tree.outputs.cache-matched-key != '' }}
+        if: ${{ !inputs.force_configure && steps.cmake-inputs.outputs.changed != 'true' }}
         run: |
           # ZERO_CHECK regenerates the project when any CMakeLists.txt is newer
           # than the generated files. A fresh checkout makes them all newer,
@@ -344,6 +364,7 @@ jobs:
           find . -type f \( -name 'CMakeLists.txt' -o -name '*.cmake' \) \
             -not -path './out/*' -exec touch -t 202001010000 {} +
           test -f out/app-ios/ds2.xcodeproj/project.pbxproj
+          test -f out/app-ios/.cmake_inputs_hash
           echo "Xcode project restored from cache; configure skipped"
 
       # GitHub checkout refreshes every file's mtime, and the generated-code
