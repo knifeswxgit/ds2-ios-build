@@ -329,7 +329,7 @@ jobs:
             -DREXGLUE_ENABLE_TRACY=OFF \
             -DCMAKE_CXX_FLAGS="-I$GITHUB_WORKSPACE/ios_port/include -I$MOLTENVK_INCLUDE" \
             -DCMAKE_EXE_LINKER_FLAGS="-framework IOSurface" \
-            ${{ inputs.use_ccache && '-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache' || '' }}
+            ${{ inputs.use_ccache && '-DCMAKE_XCODE_ATTRIBUTE_CC="ccache clang" -DCMAKE_XCODE_ATTRIBUTE_CXX="ccache clang++"' || '' }}
 
       - name: Use cached Xcode project (skip 3-minute reconfigure)
         if: ${{ !inputs.force_configure && steps.cache-ios-tree.outputs.cache-matched-key != '' }}
@@ -446,6 +446,17 @@ jobs:
             ds2-ios-signed.ipa
           if-no-files-found: ignore
           retention-days: 7
+
+      # Publish the fresh .ipa into the rolling "ds2-ios-latest" release so it
+      # can be downloaded straight from GitHub on the phone (GBox / Safari).
+      - name: Publish .ipa to ds2-ios-latest release
+        if: ${{ hashFiles('ds2-ios.ipa') != '' }}
+        run: |
+          gh release upload ds2-ios-latest ds2-ios.ipa \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          echo "Download: https://github.com/$GITHUB_REPOSITORY/releases/download/ds2-ios-latest/ds2-ios.ipa"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
 # KNOWN INTEGRATION ITEMS (will surface on the first build):
 #  - iOS app delegate / UIKit UI loop + CAMetalLayer + CADisplayLink is not
