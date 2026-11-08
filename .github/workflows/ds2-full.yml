@@ -506,10 +506,10 @@ jobs:
             git add gbox/ds2.appsrc
             git commit -m "gbox: bump source to $VER [skip ci]"
             git push
-            # jsDelivr caches branch refs ~12h; purge so GBox sees the bump now
-            curl -s -o /dev/null "https://purge.jsdelivr.net/gh/$GITHUB_REPOSITORY@main/gbox/ds2.appsrc" || true
-            curl -s -o /dev/null "https://purge.jsdelivr.net/gh/$GITHUB_REPOSITORY@main/gbox/icon.png" || true
           fi
+          # The source itself rides on the release too: release assets are not
+          # CDN-cached, so GBox always sees the fresh list at a stable URL.
+          gh release upload ds2-ios-latest gbox/ds2.appsrc --repo "$GITHUB_REPOSITORY" --clobber
 
 # KNOWN INTEGRATION ITEMS (will surface on the first build):
 #  - iOS app delegate / UIKit UI loop + CAMetalLayer + CADisplayLink is not
