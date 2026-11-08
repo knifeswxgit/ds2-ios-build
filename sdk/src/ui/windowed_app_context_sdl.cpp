@@ -48,7 +48,14 @@ bool SDLWindowedAppContext::Initialize() {
   // Picked before SDL_InitSubSystem, long before a graphics instance can say
   // which surface extensions it has, so the cvar is the escape hatch.
   std::string requested_driver = REXCVAR_GET(video_driver);
-#if REX_PLATFORM_MAC
+#if REX_PLATFORM_IOS
+  // REX_PLATFORM_MAC is 1 on iOS too, so this branch must come first: the
+  // UIKit driver is the only one that exists on the phone (confirmed on
+  // device: "compiled video drivers: uikit,offscreen", cocoa fails instantly).
+  if (requested_driver.empty()) {
+    requested_driver = "uikit";
+  }
+#elif REX_PLATFORM_MAC
   // macOS presents via a CAMetalLayer surface obtained from the Cocoa driver.
   if (requested_driver.empty()) {
     requested_driver = "cocoa";
