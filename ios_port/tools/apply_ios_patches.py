@@ -1285,6 +1285,69 @@ hunk("sdk/src/system/xmemory.cpp",
   ds2_ios::DebugMark("mem: MapViewsMac ok");""", "xmemory: MapViewsMac ok mark", 'mem: MapViewsMac ok')
 
 
+hunk("sdk/src/graphics/vulkan/pipeline_cache.cpp",
+"""#include <algorithm>
+""",
+"""#include <algorithm>
+#include <rex/platform.h>
+#if REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#include "ds2_ios/ios_paths.h"
+#endif
+""", "pipeline_cache: iOS includes", 'ds2_ios/ios_log_overlay.h')
+
+hunk("sdk/src/graphics/vulkan/pipeline_cache.cpp",
+"""  auto shader_storage_root = cache_root / "shaders";
+  auto shader_storage_shareable_root = shader_storage_root / "shareable";
+  if (!std::filesystem::exists(shader_storage_shareable_root)) {
+    if (!std::filesystem::create_directories(shader_storage_shareable_root)) {
+      REXGPU_ERROR(
+          "Failed to create the shareable shader storage directory, persistent "
+          "shader storage will be disabled: {}",
+          rex::path_to_utf8(shader_storage_shareable_root));
+      return;
+    }
+  }""",
+"""#if REX_PLATFORM_IOS
+  // On iOS the .app bundle is read-only and the process CWD is "/". Never
+  // trust a relative/bundle cache_root here: pick the writable Documents
+  // cache and use the non-throwing create_directories overload.
+  auto effective_cache_root = ds2_ios::DocumentsPath() / "user" / "cache";
+#else
+  auto effective_cache_root = cache_root;
+#endif
+  auto shader_storage_root = effective_cache_root / "shaders";
+  auto shader_storage_shareable_root = shader_storage_root / "shareable";
+#if REX_PLATFORM_IOS
+  ds2_ios::DebugMark(("shader storage root=" + rex::path_to_utf8(shader_storage_shareable_root) +
+                      " (given=" + rex::path_to_utf8(cache_root) + ")").c_str());
+#endif
+  bool shareable_exists = false;
+  {
+    std::error_code ec;
+    shareable_exists = std::filesystem::exists(shader_storage_shareable_root, ec);
+#if REX_PLATFORM_IOS
+    ds2_ios::DebugMark(("shader storage exists=" + std::to_string(shareable_exists) +
+                        " ec=" + std::to_string(ec.value())).c_str());
+#endif
+  }
+  if (!shareable_exists) {
+    std::error_code ec;
+    std::filesystem::create_directories(shader_storage_shareable_root, ec);
+#if REX_PLATFORM_IOS
+    ds2_ios::DebugMark(("shader storage mkdir ec=" + std::to_string(ec.value()) +
+                        " msg=" + ec.message()).c_str());
+#endif
+    if (ec) {
+      REXGPU_ERROR(
+          "Failed to create the shareable shader storage directory, persistent "
+          "shader storage will be disabled: {} ({})",
+          rex::path_to_utf8(shader_storage_shareable_root), ec.message());
+      return;
+    }
+  }""", "pipeline_cache: iOS writable shader storage + non-throwing mkdir", 'shader storage root=')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")
