@@ -528,6 +528,8 @@ jobs:
       # so bump version + timestamp on every build and commit it back.
       - name: Refresh GBox source (ds2.appsrc)
         if: ${{ hashFiles('ds2-ios.ipa') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VER="${IPA_VER:-$(date -u +'%Y.%m.%d.%H%M')}"
           STAMP="$(date -u +'%Y-%m-%dT%H:%M:%S+0000')"
