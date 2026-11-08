@@ -1,9 +1,18 @@
 #pragma once
 
-// Single source of truth for the on-screen controls: the input driver uses
-// these normalized rectangles for hit testing, ios_paths.mm draws them.
-// Landscape coordinates, 0..1, origin top-left. X_INPUT_GAMEPAD_* bit values
-// from sdk/include/rex/input/input.h.
+// Single source of truth for the on-screen controls.
+//
+// The default zone table lives in ios_controls.mm. The layout is
+// runtime-mutable (drag-to-move in edit mode) and persisted in
+// NSUserDefaults. The input driver hit-tests GetTouchZones(), the overlay
+// in ios_controls.mm draws exactly the same rectangles, so what is drawn
+// is what is pressed.
+//
+// Coordinates are normalized 0..1, landscape, origin top-left.
+// Button masks are X_INPUT_GAMEPAD_* values (sdk/include/rex/input/input.h).
+// A zone with button == 0 is an analog trigger zone (left one = LT,
+// right one = RT).
+
 namespace ds2_ios {
 
 struct TouchZone {
@@ -12,24 +21,27 @@ struct TouchZone {
   const char* label;
 };
 
-static constexpr TouchZone kTouchZones[] = {
-    {0.86f, 0.44f, 0.93f, 0.58f, 0x1000, "A"},       // kA
-    {0.93f, 0.32f, 1.00f, 0.46f, 0x2000, "B"},       // kB
-    {0.79f, 0.32f, 0.86f, 0.46f, 0x4000, "X"},       // kX
-    {0.86f, 0.20f, 0.93f, 0.34f, 0x8000, "Y"},       // kY
-    {0.00f, 0.30f, 0.09f, 0.40f, 0x0100, "LB"},      // kLB
-    {0.91f, 0.30f, 1.00f, 0.40f, 0x0200, "RB"},      // kRB
-    {0.00f, 0.16f, 0.09f, 0.26f, 0, "LT"},           // analog trigger
-    {0.91f, 0.16f, 1.00f, 0.26f, 0, "RT"},           // analog trigger
-    {0.44f, 0.00f, 0.56f, 0.08f, 0x0010, "START"},   // kStart
-    {0.56f, 0.00f, 0.64f, 0.08f, 0x0020, "BACK"},    // kBack
-    {0.00f, 0.00f, 0.06f, 0.07f, 0x0001, "^"},       // kDUp
-    {0.00f, 0.07f, 0.06f, 0.14f, 0x0002, "v"},       // kDDown
-    {0.06f, 0.00f, 0.10f, 0.07f, 0x0004, "<"},       // kDLeft
-    {0.06f, 0.07f, 0.10f, 0.14f, 0x0008, ">"},       // kDRight
-};
+// Defaults, kept for ResetTouchZones() and for validating saved layouts.
+extern const TouchZone kDefaultTouchZones[];
+extern const int kDefaultTouchZoneCount;
 
-static constexpr int kTouchZoneCount =
-    static_cast<int>(sizeof(kTouchZones) / sizeof(kTouchZones[0]));
+// Current (possibly user-moved) layout. Lazily loads persisted overrides.
+const TouchZone* GetTouchZones();
+int GetTouchZoneCount();
+
+// Move/resize one zone (clamped to the screen, kept non-degenerate).
+void SetTouchZoneRect(int index, float x0, float y0, float x1, float y1);
+void ResetTouchZones();
+
+// Installs the drawn buttons + drag recognizers + the single settings
+// button ("SET") with its panel: move buttons, reset layout, show logs,
+// display scaling (Base / Stretch / Manual). Idempotent.
+void InstallControlsOverlay();
+
+// Re-fit zone frames to the current root bounds (rotation/resize).
+void RelayoutZoneViews();
+
+// Programmatic scaling of the rendered game view (Manual mode).
+void SetGameDisplayScale(float sx, float sy);
 
 }  // namespace ds2_ios

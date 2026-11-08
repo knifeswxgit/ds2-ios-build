@@ -1198,6 +1198,24 @@ hunk("sdk/src/system/runtime.cpp",
     return status;
   };""", "runtime.cpp: fail lambda reason mark", 'runtime: Setup FAILED')
 
+# DS2 looks for downloadable/compatibility content on install://; without this
+# symlink it refuses to start with "please insert the installation disc".
+hunk("sdk/src/system/runtime.cpp",
+"""  // Register symbolic links for game: and D:
+  file_system_->RegisterSymbolicLink("game:", mount_path);
+  file_system_->RegisterSymbolicLink("d:", mount_path);
+  REXSYS_DEBUG("  Registered symbolic links: game:, d:");""",
+"""  // Register symbolic links for game: and D:
+  file_system_->RegisterSymbolicLink("game:", mount_path);
+  file_system_->RegisterSymbolicLink("d:", mount_path);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // DS2 probes install:// for the compatibility pack; without this link the
+  // game aborts with "insert the installation disc".
+  file_system_->RegisterSymbolicLink("install:", mount_path);
+#endif
+  REXSYS_DEBUG("  Registered symbolic links: game:, d:");""",
+"runtime.cpp: install: symlink (compatibility pack)", 'RegisterSymbolicLink("install:"')
+
 
 hunk("sdk/src/core/memory_posix.cpp",
 """#include <rex/logging.h>

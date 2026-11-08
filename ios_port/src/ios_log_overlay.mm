@@ -31,7 +31,6 @@ namespace {
 
 constexpr size_t kMaxLines = 1500;
 constexpr long kMaxFileBytes = 4 * 1024 * 1024;
-constexpr int kMaxWindowRetries = 40;
 
 std::mutex g_mutex;
 std::deque<std::string> g_lines;
@@ -168,7 +167,7 @@ void ShowOverlay(UIWindow* window) {
   [g_panel addSubview:g_text];
 
   UILabel* title = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, frame.size.width - 110, 18)];
-  title.text = @"DS2 log  (3 taps top-center = close)";
+  title.text = @"DS2 log";
   title.textColor = UIColor.greenColor;
   title.font = [UIFont boldSystemFontOfSize:10];
   [g_panel addSubview:title];
@@ -398,41 +397,13 @@ void DebugMark(const char* stage) {
 void InstallLogOverlay() {
   if (g_overlay_installed) return;
   g_overlay_installed = true;
+  // No standalone UI any more: the log panel is toggled from the controls
+  // settings panel (SET -> Show logs) via ToggleLogOverlay below. The sink is
+  // installed separately by InstallLogSink().
+}
 
-  dispatch_async(dispatch_get_main_queue(), ^{
-    __block int retries = 0;
-    void (^try_install)(void) = nil;
-    try_install = ^{
-      UIWindow* window = KeyWindow();
-      if (!window) {
-        if (++retries < kMaxWindowRetries) {
-          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
-                         dispatch_get_main_queue(), try_install);
-        }
-        return;
-      }
-      // A real button instead of a triple-tap gesture: the gesture swallowed
-      // taps near the top-center START zone and was impossible to hit in game.
-      DS2TapProxy* proxy = [[DS2TapProxy alloc] init];
-      proxy.onTap = ^{ dispatch_async(dispatch_get_main_queue(), ^{ ToggleOverlay(); }); };
-      UIButton* log_button = [UIButton buttonWithType:UIButtonTypeRoundedRect];
-      log_button.frame = CGRectMake(CGRectGetWidth(window.bounds) * 0.34f, 4, 54, 22);
-      log_button.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
-                                    UIViewAutoresizingFlexibleRightMargin;
-      [log_button setTitle:@"LOG" forState:UIControlStateNormal];
-      [log_button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-      log_button.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-      log_button.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.45];
-      log_button.layer.cornerRadius = 5;
-      log_button.alpha = 0.65;
-      [log_button addTarget:proxy action:NSSelectorFromString(@"tap:")
-           forControlEvents:UIControlEventTouchUpInside];
-      objc_setAssociatedObject(window, "ds2_log_button_proxy", proxy, OBJC_ASSOCIATION_RETAIN);
-      [window addSubview:log_button];
-      [window bringSubviewToFront:log_button];
-    };
-    try_install();
-  });
+void ToggleLogOverlay() {
+  dispatch_async(dispatch_get_main_queue(), ^{ ToggleOverlay(); });
 }
 
 }  // namespace ds2_ios

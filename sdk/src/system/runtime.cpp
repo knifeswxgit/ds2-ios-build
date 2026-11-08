@@ -331,6 +331,11 @@ bool Runtime::SetupVfs() {
   // Register symbolic links for game: and D:
   file_system_->RegisterSymbolicLink("game:", mount_path);
   file_system_->RegisterSymbolicLink("d:", mount_path);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // DS2 probes install:\ for the compatibility pack; without this link the
+  // game aborts with "insert the installation disc".
+  file_system_->RegisterSymbolicLink("install:", mount_path);
+#endif
   REXSYS_DEBUG("  Registered symbolic links: game:, d:");
 
   // Mount update_data_root as update:\ if provided

@@ -75,6 +75,7 @@ if(REXGLUE_PLATFORM_IOS)
     target_sources(ds2 PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_paths.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_log_overlay.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_controls.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_touch_input_driver.cpp")
     target_include_directories(ds2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/include")
     if(REXGLUE_IOS_SDL3)
@@ -82,6 +83,8 @@ if(REXGLUE_PLATFORM_IOS)
     endif()
     set_source_files_properties(
         "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_paths.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_log_overlay.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ios_port/src/ios_controls.mm"
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
 target_link_libraries(ds2 PRIVATE ds2_recomp rex::runtime)

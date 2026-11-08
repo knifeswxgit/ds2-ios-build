@@ -40,6 +40,10 @@ struct StickCapture {
   bool active = false;
 };
 
+// Finger ids currently holding the analog triggers (zones with button == 0).
+uint64_t left_trig_finger = 0;
+uint64_t right_trig_finger = 0;
+
 constexpr float kStickRadius = 0.11f;  // normalized
 constexpr float kDeadZone = 0.12f;
 
@@ -96,21 +100,31 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
       // and previously taps on A/B/X/Y were swallowed as stick captures.
       uint16_t mask = 0;
       bool in_zone = false;
-      for (const auto& z : kTouchZones) {
+      const int zone_count = GetTouchZoneCount();
+      const TouchZone* zones = GetTouchZones();
+      for (int i = 0; i < zone_count; ++i) {
+        const TouchZone& z = zones[i];
         if (x >= z.x0 && x < z.x1 && y >= z.y0 && y < z.y1) {
-          mask = z.button;
           in_zone = true;
+          if (z.button == 0) {
+            // analog trigger zone: left half = LT, right half = RT
+            if (x < 0.5f) { left_trig_finger = id; state_.lt = 255; }
+            else { right_trig_finger = id; state_.rt = 255; }
+          } else {
+            mask = z.button;
+            touch_buttons[id] = mask;
+            state_.buttons |= mask;
+          }
+          mark();
           break;
         }
       }
-      if (in_zone) {
-        if (x < 0.10f && y >= 0.16f && y < 0.26f) { state_.lt = 255; mark(); }
-        else if (x > 0.90f && y >= 0.16f && y < 0.26f) { state_.rt = 255; mark(); }
-        if (mask) { touch_buttons[id] = mask; state_.buttons |= mask; mark(); }
-      } else if (x < 0.35f && y > 0.45f) {
-        left_stick = {id, x, y, true};
-      } else if (x > 0.65f && y > 0.45f) {
-        right_stick = {id, x, y, true};
+      if (!in_zone) {
+        if (x < 0.35f && y > 0.45f) {
+          left_stick = {id, x, y, true};
+        } else if (x > 0.65f && y > 0.45f) {
+          right_stick = {id, x, y, true};
+        }
       }
       break;
     }
@@ -150,8 +164,8 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
         right_stick.active = false; state_.rx = state_.ry = 0; mark();
       }
       // Release triggers when their finger leaves.
-      if (e->tfinger.x < 0.10f) { state_.lt = 0; mark(); }
-      if (e->tfinger.x > 0.90f) { state_.rt = 0; mark(); }
+      if (left_trig_finger == id) { left_trig_finger = 0; state_.lt = 0; mark(); }
+      if (right_trig_finger == id) { right_trig_finger = 0; state_.rt = 0; mark(); }
       break;
     }
     case SDL_EVENT_GAMEPAD_ADDED:
@@ -274,15 +288,17 @@ void IosTouchInputDriver::Reset() {
   std::lock_guard<std::mutex> lock(mutex_);
   state_ = Snapshot{};
   state_.changed = true;
+  left_trig_finger = 0;
+  right_trig_finger = 0;
 }
 
 void IosTouchInputDriver::InstallPlatformHooks() {
   static std::once_flag once;
   std::call_once(once, [] {
     ds2_ios::InstallMemoryWarningHandler();
-    ds2_ios::InstallLogOverlay();  // 3 taps top-center -> log viewer
+    ds2_ios::InstallLogOverlay();  // infra only; toggled via SET -> Show logs
     dispatch_async(dispatch_get_main_queue(), ^{
-      ds2_ios::InstallTouchOverlay();
+      ds2_ios::InstallTouchOverlay();  // -> InstallControlsOverlay()
     });
   });
 }
