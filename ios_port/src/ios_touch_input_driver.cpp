@@ -16,6 +16,7 @@
 
 #include "ds2_ios/ios_paths.h"
 #include "ds2_ios/ios_log_overlay.h"
+#include "ds2_ios/ios_controls_layout.h"
 
 namespace ds2_ios {
 namespace {
@@ -32,7 +33,6 @@ enum : uint16_t {
 };
 
 // Layout shared with the drawn overlay (see ds2_ios/ios_controls_layout.h).
-#include "ds2_ios/ios_controls_layout.h"
 
 struct StickCapture {
   uint64_t finger = 0;
