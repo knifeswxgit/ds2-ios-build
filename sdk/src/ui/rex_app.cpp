@@ -222,6 +222,7 @@ bool ReXApp::SetupEnvironment() {
   log_sink_ = std::make_shared<rex::LogCaptureSink>();
   rex::AddSink(log_sink_);
 
+  OnPostInitLogging();
   ds2_ios::DebugMark("rex_app: OnPostInitLogging done");
 
   if (std::filesystem::exists(config_path_))

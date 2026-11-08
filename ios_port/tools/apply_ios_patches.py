@@ -871,7 +871,8 @@ hunk("sdk/src/ui/rex_app.cpp",
 hunk("sdk/src/ui/rex_app.cpp",
 """  OnPostInitLogging();
 """,
-"""  DS2_MARK("rex_app: OnPostInitLogging done");
+"""  OnPostInitLogging();
+  DS2_MARK("rex_app: OnPostInitLogging done");
 """, "rex_app: OnPostInitLogging milestone", '"rex_app: OnPostInitLogging done"')
 
 hunk("app/src/ds2_app.h",
