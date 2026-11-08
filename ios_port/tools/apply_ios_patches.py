@@ -1048,6 +1048,74 @@ hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
 """, "sdlctx: uikit video driver on iOS", 'requested_driver = "uikit"')
 
 
+hunk("sdk/src/ui/rex_app.cpp",
+"""bool ReXApp::OnInitialize() {
+  if (!SetupEnvironment())
+    return false;
+  if (!SetupPresentation())
+    return false;
+
+  auto paths = OnFinalizePaths(resolved_defaults_, MakeResumeCallback());
+  if (!paths) {
+    // Async: consumer will invoke resume when ready. OnInitialize returns
+    // true so the event loop keeps pumping (wizard dialogs render).
+    return true;
+  }
+
+  if (!ConstructRuntime(*paths))
+    return false;
+  LaunchModule();
+  return true;
+}
+""",
+"""bool ReXApp::OnInitialize() {
+  if (!SetupEnvironment()) {
+    ds2_ios::DebugMark("rex_app: SetupEnvironment FAILED");
+    return false;
+  }
+  ds2_ios::DebugMark("rex_app: SetupEnvironment ok");
+  if (!SetupPresentation()) {
+    ds2_ios::DebugMark("rex_app: SetupPresentation FAILED");
+    return false;
+  }
+  ds2_ios::DebugMark("rex_app: SetupPresentation ok");
+
+  auto paths = OnFinalizePaths(resolved_defaults_, MakeResumeCallback());
+  if (!paths) {
+    // Async: consumer will invoke resume when ready. OnInitialize returns
+    // true so the event loop keeps pumping (wizard dialogs render).
+    ds2_ios::DebugMark("rex_app: OnFinalizePaths async (no paths)");
+    return true;
+  }
+  ds2_ios::DebugMark("rex_app: OnFinalizePaths ok");
+
+  if (!ConstructRuntime(*paths)) {
+    ds2_ios::DebugMark("rex_app: ConstructRuntime FAILED");
+    return false;
+  }
+  ds2_ios::DebugMark("rex_app: ConstructRuntime ok");
+  LaunchModule();
+  ds2_ios::DebugMark("rex_app: LaunchModule done");
+  return true;
+}
+""", "rex_app: per-stage marks in OnInitialize", 'rex_app: SetupPresentation ok')
+
+hunk("sdk/src/ui/windowed_app_main_sdl.cpp",
+"""    DS2_MARK("main: calling OnInitialize");
+    result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+    DS2_MARK("main: RunMainMessageLoop returned");
+""",
+"""    DS2_MARK("main: calling OnInitialize");
+    if (app->OnInitialize()) {
+      result = app_context.RunMainMessageLoop();
+      DS2_MARK("main: RunMainMessageLoop returned");
+    } else {
+      DS2_MARK("main: OnInitialize returned FALSE");
+      result = EXIT_FAILURE;
+    }
+""", "main: split OnInitialize result marks", 'main: OnInitialize returned FALSE')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")

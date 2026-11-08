@@ -107,21 +107,33 @@ system::AchievementManager& ReXApp::achievements() const {
 }
 
 bool ReXApp::OnInitialize() {
-  if (!SetupEnvironment())
+  if (!SetupEnvironment()) {
+    ds2_ios::DebugMark("rex_app: SetupEnvironment FAILED");
     return false;
-  if (!SetupPresentation())
+  }
+  ds2_ios::DebugMark("rex_app: SetupEnvironment ok");
+  if (!SetupPresentation()) {
+    ds2_ios::DebugMark("rex_app: SetupPresentation FAILED");
     return false;
+  }
+  ds2_ios::DebugMark("rex_app: SetupPresentation ok");
 
   auto paths = OnFinalizePaths(resolved_defaults_, MakeResumeCallback());
   if (!paths) {
     // Async: consumer will invoke resume when ready. OnInitialize returns
     // true so the event loop keeps pumping (wizard dialogs render).
+    ds2_ios::DebugMark("rex_app: OnFinalizePaths async (no paths)");
     return true;
   }
+  ds2_ios::DebugMark("rex_app: OnFinalizePaths ok");
 
-  if (!ConstructRuntime(*paths))
+  if (!ConstructRuntime(*paths)) {
+    ds2_ios::DebugMark("rex_app: ConstructRuntime FAILED");
     return false;
+  }
+  ds2_ios::DebugMark("rex_app: ConstructRuntime ok");
   LaunchModule();
+  ds2_ios::DebugMark("rex_app: LaunchModule done");
   return true;
 }
 

@@ -83,8 +83,13 @@ int RunWindowedApp(int argc, char** argv) {
     app->SetParsedArguments(std::move(parsed));
 
     DS2_MARK("main: calling OnInitialize");
-    result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
-    DS2_MARK("main: RunMainMessageLoop returned");
+    if (app->OnInitialize()) {
+      result = app_context.RunMainMessageLoop();
+      DS2_MARK("main: RunMainMessageLoop returned");
+    } else {
+      DS2_MARK("main: OnInitialize returned FALSE");
+      result = EXIT_FAILURE;
+    }
     DS2_MARK("main: message loop finished");
 
     app->InvokeOnDestroy();
