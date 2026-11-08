@@ -283,7 +283,7 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
   ds2_ios::DebugMark("cr: runtime object created, calling Setup");
   auto status = runtime_->Setup(ppc_info_, std::move(config_));
   ds2_ios::DebugMark(("cr: Setup returned 0x" +
-                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).c_str());
   if (XFAILED(status)) {
     REXLOG_ERROR("Runtime setup failed: {:08X}", status);
     return false;
@@ -342,7 +342,7 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
 
   status = runtime_->LoadXexImage(xex_image);
   ds2_ios::DebugMark(("cr: LoadXexImage returned 0x" +
-                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).c_str());
   if (XFAILED(status)) {
     auto msg = fmt::format("Failed to load XEX ({}): {:08X}", xex_image, status);
     REXLOG_ERROR("{}", msg);

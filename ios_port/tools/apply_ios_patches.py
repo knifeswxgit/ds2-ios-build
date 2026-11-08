@@ -1129,7 +1129,7 @@ hunk("sdk/src/ui/rex_app.cpp",
 """  ds2_ios::DebugMark("cr: runtime object created, calling Setup");
   auto status = runtime_->Setup(ppc_info_, std::move(config_));
   ds2_ios::DebugMark(("cr: Setup returned 0x" +
-                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).c_str());
   if (XFAILED(status)) {
     REXLOG_ERROR("Runtime setup failed: {:08X}", status);
 """, "cr: Setup status mark", 'cr: Setup returned 0x')
@@ -1148,7 +1148,7 @@ hunk("sdk/src/ui/rex_app.cpp",
   if (XFAILED(status)) {""",
 """  status = runtime_->LoadXexImage(xex_image);
   ds2_ios::DebugMark(("cr: LoadXexImage returned 0x" +
-                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).
+                      [](uint32_t s) { char b[12]; snprintf(b, sizeof(b), "%08X", s); return std::string(b); }(status)).c_str());
   if (XFAILED(status)) {""", "cr: LoadXexImage status mark", 'cr: LoadXexImage returned 0x')
 
 hunk("sdk/src/ui/rex_app.cpp",
