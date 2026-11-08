@@ -346,8 +346,16 @@ jobs:
 
       - name: Build Mach-O
         run: |
+          echo "--- ccache diag ---"
+          ccache -p 2>/dev/null | grep -i cache_dir || echo "no ccache config"
+          du -sh ~/Library/Caches/ccache 2>/dev/null || echo "cache dir empty/missing"
+          grep -c ccache out/app-ios/*.xcodeproj/project.pbxproj 2>/dev/null || echo "ccache NOT in pbxproj"
+          ccache -z 2>/dev/null || true
           JOBS="$(sysctl -n hw.ncpu)"
           cmake --build out/app-ios --config Release --target ds2 -- -jobs "$JOBS"
+          echo "--- ccache stats after build ---"
+          ccache -s 2>/dev/null | head -8 || true
+          du -sh ~/Library/Caches/ccache 2>/dev/null || true
 
       # The Xcode generator honours RUNTIME_OUTPUT_DIRECTORY ($<TARGET_FILE_DIR:
       # rex::runtime>), so the binary lands in sdk/out/ios-arm64/Release, NOT
