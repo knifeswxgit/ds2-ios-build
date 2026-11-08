@@ -931,10 +931,54 @@ hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
 """, "sdlctx: DebugMark include", "#define DS2_CTX_MARK")
 
 hunk("sdk/src/ui/windowed_app_context_sdl.cpp",
-"""  DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
+"""  if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
+    REXLOG_ERROR("SDL_InitSubSystem(SDL_INIT_VIDEO) failed: {}", SDL_GetError());
+    return false;
+  }
+  const char* video_driver_in_use = SDL_GetCurrentVideoDriver();
+  REXLOG_INFO("SDL video driver: {}", video_driver_in_use ? video_driver_in_use : "unknown");
+  uint32_t first = SDL_RegisterEvents(2);
+  if (first == 0) {
+    REXLOG_ERROR("SDL_RegisterEvents failed: {}", SDL_GetError());
+    return false;
+  }
+  wakeup_event_type_ = first;
+  paint_event_type_ = first + 1;
+  if (!SDL_AddEventWatch(WatchEvent, this)) {
+    REXLOG_ERROR("SDL_AddEventWatch failed: {}", SDL_GetError());
+    return false;
+  }
+  event_watch_registered_ = true;
+  return true;
+}
 """,
 """  DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)");
-""", "sdlctx: marks anchor", 'DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)")')
+  if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
+    REXLOG_ERROR("SDL_InitSubSystem(SDL_INIT_VIDEO) failed: {}", SDL_GetError());
+    return false;
+  }
+  const char* video_driver_in_use = SDL_GetCurrentVideoDriver();
+  DS2_CTX_MARK(video_driver_in_use
+                   ? ("sdlctx: video ok, driver=" + std::string(video_driver_in_use)).c_str()
+                   : "sdlctx: video ok, driver=unknown");
+  REXLOG_INFO("SDL video driver: {}", video_driver_in_use ? video_driver_in_use : "unknown");
+  uint32_t first = SDL_RegisterEvents(2);
+  if (first == 0) {
+    REXLOG_ERROR("SDL_RegisterEvents failed: {}", SDL_GetError());
+    return false;
+  }
+  DS2_CTX_MARK("sdlctx: events registered");
+  wakeup_event_type_ = first;
+  paint_event_type_ = first + 1;
+  if (!SDL_AddEventWatch(WatchEvent, this)) {
+    REXLOG_ERROR("SDL_AddEventWatch failed: {}", SDL_GetError());
+    return false;
+  }
+  DS2_CTX_MARK("sdlctx: event watch ok");
+  event_watch_registered_ = true;
+  return true;
+}
+""", "sdlctx: fine marks in Initialize", 'DS2_CTX_MARK("sdlctx: calling SDL_InitSubSystem(VIDEO)")')
 
 
 def main():
