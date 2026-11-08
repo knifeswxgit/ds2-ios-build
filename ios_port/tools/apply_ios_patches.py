@@ -1198,6 +1198,92 @@ hunk("sdk/src/system/runtime.cpp",
   };""", "runtime.cpp: fail lambda reason mark", 'runtime: Setup FAILED')
 
 
+hunk("sdk/src/core/memory_posix.cpp",
+"""#include <rex/logging.h>
+""",
+"""#include <rex/logging.h>
+#if REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+""", "memory_posix: DebugMark include", 'ds2_ios/ios_log_overlay.h')
+
+hunk("sdk/src/core/memory_posix.cpp",
+"""FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, size_t length,
+                                          PageAccess access, bool commit) {
+#if REX_PLATFORM_ANDROID""",
+"""#if REX_PLATFORM_IOS
+static std::string MakeIosBackingPath(const std::filesystem::path& path) {
+  const char* tmp = getenv("TMPDIR");
+  std::string result = (tmp && *tmp) ? tmp : "/tmp/";
+  if (!result.empty() && result.back() != '/') result += '/';
+  result += "ds2_guest_";
+  result += path.filename().string();
+  return result;
+}
+#endif
+
+FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, size_t length,
+                                          PageAccess access, bool commit) {
+#if REX_PLATFORM_IOS
+  // POSIX shared memory (shm_open) is unavailable to sandboxed iOS apps.
+  // A sparse file in the app's TMPDIR provides the same shared, fd-backed
+  // object for the MAP_SHARED|MAP_FIXED guest views (MapViewsMac).
+  (void)access;
+  (void)commit;
+  std::string backing = MakeIosBackingPath(path);
+  int ret = open(backing.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+  if (ret < 0) {
+    ds2_ios::DebugMark(("mem: ios backing open FAILED errno=" + std::to_string(errno)).c_str());
+    return kFileMappingHandleInvalid;
+  }
+  if (rex_ftruncate64(ret, static_cast<off_t>(length)) != 0) {
+    ds2_ios::DebugMark(("mem: ios backing ftruncate FAILED errno=" + std::to_string(errno)).c_str());
+    close(ret);
+    unlink(backing.c_str());
+    return kFileMappingHandleInvalid;
+  }
+  ds2_ios::DebugMark(("mem: ios backing ok size=" + std::to_string(length)).c_str());
+  return static_cast<FileMappingHandle>(ret);
+#elif REX_PLATFORM_ANDROID""", "memory_posix: iOS sparse-file backing instead of shm_open", 'MakeIosBackingPath')
+
+hunk("sdk/src/core/memory_posix.cpp",
+"""  close(static_cast<int>(handle));
+#if !REX_PLATFORM_ANDROID
+  auto full_path = MakeShmName(path);""",
+"""  close(static_cast<int>(handle));
+#if REX_PLATFORM_IOS
+  unlink(MakeIosBackingPath(path).c_str());
+#elif !REX_PLATFORM_ANDROID
+  auto full_path = MakeShmName(path);""", "memory_posix: iOS cleanup of backing file", 'unlink(MakeIosBackingPath')
+
+hunk("sdk/src/system/xmemory.cpp",
+"""#include <rex/logging.h>
+""",
+"""#include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+""", "xmemory: DebugMark include", "#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS")
+
+hunk("sdk/src/system/xmemory.cpp",
+"""  if (mapping_ == rex::memory::kFileMappingHandleInvalid) {""",
+"""  ds2_ios::DebugMark(("mem: CreateFileMappingHandle " +
+                      std::string(mapping_ == rex::memory::kFileMappingHandleInvalid ? "FAILED" : "ok")).c_str());
+  if (mapping_ == rex::memory::kFileMappingHandleInvalid) {""", "xmemory: mapping result mark", 'mem: CreateFileMappingHandle')
+
+hunk("sdk/src/system/xmemory.cpp",
+"""  if (MapViewsMac()) {
+    REXSYS_ERROR""",
+"""  if (MapViewsMac()) {
+    ds2_ios::DebugMark("mem: MapViewsMac FAILED");
+    REXSYS_ERROR""", "xmemory: MapViewsMac failure mark", 'mem: MapViewsMac FAILED')
+
+hunk("sdk/src/system/xmemory.cpp",
+"""  mapping_base_ = views_.all_views[0];""",
+"""  mapping_base_ = views_.all_views[0];
+  ds2_ios::DebugMark("mem: MapViewsMac ok");""", "xmemory: MapViewsMac ok mark", 'mem: MapViewsMac ok')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")

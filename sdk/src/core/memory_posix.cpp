@@ -38,6 +38,9 @@
 #include <unistd.h>
 
 #include <rex/logging.h>
+#if REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#endif
 #include <rex/math.h>
 #include <rex/memory/utils.h>
 #include <rex/platform.h>
@@ -450,9 +453,40 @@ bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out) {
 #endif
 }
 
+#if REX_PLATFORM_IOS
+static std::string MakeIosBackingPath(const std::filesystem::path& path) {
+  const char* tmp = getenv("TMPDIR");
+  std::string result = (tmp && *tmp) ? tmp : "/tmp/";
+  if (!result.empty() && result.back() != '/') result += '/';
+  result += "ds2_guest_";
+  result += path.filename().string();
+  return result;
+}
+#endif
+
 FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, size_t length,
                                           PageAccess access, bool commit) {
-#if REX_PLATFORM_ANDROID
+#if REX_PLATFORM_IOS
+  // POSIX shared memory (shm_open) is unavailable to sandboxed iOS apps.
+  // A sparse file in the app's TMPDIR provides the same shared, fd-backed
+  // object for the MAP_SHARED|MAP_FIXED guest views (MapViewsMac).
+  (void)access;
+  (void)commit;
+  std::string backing = MakeIosBackingPath(path);
+  int ret = open(backing.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+  if (ret < 0) {
+    ds2_ios::DebugMark(("mem: ios backing open FAILED errno=" + std::to_string(errno)).c_str());
+    return kFileMappingHandleInvalid;
+  }
+  if (rex_ftruncate64(ret, static_cast<off_t>(length)) != 0) {
+    ds2_ios::DebugMark(("mem: ios backing ftruncate FAILED errno=" + std::to_string(errno)).c_str());
+    close(ret);
+    unlink(backing.c_str());
+    return kFileMappingHandleInvalid;
+  }
+  ds2_ios::DebugMark(("mem: ios backing ok size=" + std::to_string(length)).c_str());
+  return static_cast<FileMappingHandle>(ret);
+#elif REX_PLATFORM_ANDROID
   // TODO(Triang3l): Check if memfd can be used instead on API 30+.
   if (android_ASharedMemory_create_) {
     int sharedmem_fd = android_ASharedMemory_create_(path.c_str(), length);
@@ -510,7 +544,9 @@ FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, siz
 
 void CloseFileMappingHandle(FileMappingHandle handle, const std::filesystem::path& path) {
   close(static_cast<int>(handle));
-#if !REX_PLATFORM_ANDROID
+#if REX_PLATFORM_IOS
+  unlink(MakeIosBackingPath(path).c_str());
+#elif !REX_PLATFORM_ANDROID
   auto full_path = MakeShmName(path);
   shm_unlink(full_path.c_str());
 #endif

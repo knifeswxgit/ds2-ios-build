@@ -23,6 +23,9 @@
 #include <rex/chrono/clock.h>
 #include <rex/cvar.h>
 #include <rex/logging.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_log_overlay.h"
+#endif
 #include <rex/math.h>
 #include <rex/stream.h>
 #include <rex/system/function_dispatcher.h>
@@ -149,6 +152,8 @@ bool Memory::Initialize() {
                     static_cast<size_t>(system_allocation_granularity_));
   mapping_ = rex::memory::CreateFileMappingHandle(file_name_, mapping_size,
                                                   rex::memory::PageAccess::kReadWrite, false);
+  ds2_ios::DebugMark(("mem: CreateFileMappingHandle " +
+                      std::string(mapping_ == rex::memory::kFileMappingHandleInvalid ? "FAILED" : "ok")).c_str());
   if (mapping_ == rex::memory::kFileMappingHandleInvalid) {
     REXSYS_ERROR("Unable to reserve the 4gb guest address space.");
     assert_always();
@@ -159,11 +164,13 @@ bool Memory::Initialize() {
   // On macOS, reserve a contiguous host range first, then carve guest views
   // into it with MAP_SHARED|MAP_FIXED so all views share the same backing fd.
   if (MapViewsMac()) {
+    ds2_ios::DebugMark("mem: MapViewsMac FAILED");
     REXSYS_ERROR("Unable to find a continuous block in the 64bit address space.");
     assert_always();
     return false;
   }
   mapping_base_ = views_.all_views[0];
+  ds2_ios::DebugMark("mem: MapViewsMac ok");
 #elif REX_PLATFORM_SWITCH
   // Horizon does not allow fixed addresses: the kernel chooses the guest window,
   // which CreateFileMappingHandle reserved. We ask where it ended up and carve the
