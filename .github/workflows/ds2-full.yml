@@ -353,7 +353,10 @@ jobs:
       # rebuilds only the changed translation units.
       - name: Normalize source mtimes for incremental Xcode builds
         run: |
-          CT=$(git log -1 --format=%ct)
+          # A fixed ancient timestamp: sources must look OLDER than the cached
+          # build products. The commit time would drift forward every run and
+          # defeat the whole purpose.
+          CT=946684800
           find app sdk ios_port app/generated -type f \
             \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.mm' \
                -o -name '*.m' -o -name '*.c' -o -name '*.cmake' \
