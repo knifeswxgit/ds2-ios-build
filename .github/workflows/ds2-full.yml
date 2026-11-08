@@ -449,12 +449,20 @@ jobs:
 
       # Publish the fresh .ipa into the rolling "ds2-ios-latest" release so it
       # can be downloaded straight from GitHub on the phone (GBox / Safari).
-      - name: Publish .ipa to ds2-ios-latest release
+      - name: Publish .ipa to ds2-ios-latest release (versioned name)
         if: ${{ hashFiles('ds2-ios.ipa') != '' }}
         run: |
-          gh release upload ds2-ios-latest ds2-ios.ipa \
+          VER="$(date -u +'%Y.%m.%d.%H%M')"
+          echo "IPA_VER=$VER" >> "$GITHUB_ENV"
+          cp ds2-ios.ipa "ds2-ios-$VER.ipa"
+          # drop the previous versioned asset so only the freshest one remains
+          gh release view ds2-ios-latest --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' | grep '^ds2-ios-2' | while read -r a; do
+              gh release delete-asset ds2-ios-latest "$a" --repo "$GITHUB_REPOSITORY" -y || true
+            done
+          gh release upload ds2-ios-latest "ds2-ios-$VER.ipa" ds2-ios.ipa \
             --repo "$GITHUB_REPOSITORY" --clobber
-          echo "Download: https://github.com/$GITHUB_REPOSITORY/releases/download/ds2-ios-latest/ds2-ios.ipa"
+          echo "Download: https://github.com/$GITHUB_REPOSITORY/releases/download/ds2-ios-latest/ds2-ios-$VER.ipa"
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -463,11 +471,12 @@ jobs:
       - name: Refresh GBox source (ds2.appsrc)
         if: ${{ hashFiles('ds2-ios.ipa') != '' }}
         run: |
-          VER="$(date -u +'%Y.%m.%d.%H%M')"
+          VER="${IPA_VER:-$(date -u +'%Y.%m.%d.%H%M')}"
           STAMP="$(date -u +'%Y-%m-%dT%H:%M:%S+0000')"
-          python3 - "$VER" "$STAMP" <<'PY'
+          PKG_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/ds2-ios-latest/ds2-ios-$VER.ipa"
+          python3 - "$VER" "$STAMP" "$PKG_URL" <<'PY'
           import json, sys
-          ver, stamp = sys.argv[1], sys.argv[2]
+          ver, stamp, pkg = sys.argv[1], sys.argv[2], sys.argv[3]
           p = 'gbox/ds2.appsrc'
           src = json.load(open(p, encoding='utf-8'))
           src['sourceUpdateTime'] = stamp
@@ -475,8 +484,9 @@ jobs:
               if app.get('appType') != 'LINK':
                   app['appUpdateTime'] = stamp
                   app['appVersion'] = ver
+                  app['appPackage'] = pkg
           json.dump(src, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=4)
-          print('gbox source ->', ver)
+          print('gbox source ->', ver, pkg)
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
