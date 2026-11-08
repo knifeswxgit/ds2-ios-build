@@ -1535,6 +1535,71 @@ hunk("app/src/ds2_dlc.cpp",
     for (const auto& e : std::filesystem::directory_iterator(dlc_dir, ec)) {
 """, "ds2_dlc.cpp: DLC folder in Documents", "dlc_dir")
 
+# The package may be a file dropped straight into Documents: on iOS the AFC
+# bridge cannot create folders, and the STFS magic tells a package from the
+# rest of the game data.
+hunk("app/src/ds2_dlc.cpp",
+"""#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // On iOS the game data lives in Documents, not next to the executable (the
+  // .app bundle is read-only), so the DLC packages are looked up there.
+  const std::filesystem::path dlc_dir = ds2_ios::DocumentsPath() / "dlc";
+#else
+  const std::filesystem::path dlc_dir = exe_dir / "dlc";
+#endif
+  if (list.empty() && !dlc_dir.empty()) {
+    // Portable layout (sdmc:/switch/ds2/dlc/ on the Switch): install whatever packages were copied there.
+    std::error_code ec;
+    for (const auto& e : std::filesystem::directory_iterator(dlc_dir, ec)) {
+      if (ec) break;
+      // Skip hidden files: macOS leaves "._<name>" AppleDouble copies next to every file it writes to a FAT card.
+      if (e.path().filename().string().rfind('.', 0) == 0) continue;
+      if (e.is_regular_file(ec)) list += (list.empty() ? "" : ";") + rex::path_to_utf8(e.path());
+    }
+  }
+""",
+"""#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // On iOS the game data lives in Documents, not next to the executable (the
+  // .app bundle is read-only), so the DLC packages are looked up there. Both a
+  // dlc/ subfolder and a package dropped straight into Documents are accepted:
+  // a file counts as a package when it starts with the STFS magic.
+  const std::filesystem::path docs_dir = ds2_ios::DocumentsPath();
+  std::error_code ec;
+  auto add_package = [&](const std::filesystem::path& p) {
+    list += (list.empty() ? "" : ";") + rex::path_to_utf8(p);
+  };
+  if (std::filesystem::is_regular_file(docs_dir / "dlc", ec)) {
+    add_package(docs_dir / "dlc");
+  } else if (std::filesystem::is_directory(docs_dir / "dlc", ec)) {
+    for (const auto& e : std::filesystem::directory_iterator(docs_dir / "dlc", ec)) {
+      if (e.is_regular_file(ec)) add_package(e.path());
+    }
+  }
+  for (const auto& e : std::filesystem::directory_iterator(docs_dir, ec)) {
+    if (!e.is_regular_file(ec)) continue;
+    FILE* f = std::fopen(rex::path_to_utf8(e.path()).c_str(), "rb");
+    if (!f) continue;
+    char magic[4] = {0, 0, 0, 0};
+    const size_t got = std::fread(magic, 1, sizeof(magic), f);
+    std::fclose(f);
+    if (got != sizeof(magic)) continue;
+    const std::string m(magic, sizeof(magic));
+    if (m == "PIRS" || m == "STFS" || m == "CON ") add_package(e.path());
+  }
+#else
+  const std::filesystem::path dlc_dir = exe_dir / "dlc";
+  if (list.empty() && !exe_dir.empty()) {
+    // Portable layout (sdmc:/switch/ds2/dlc/ on the Switch): install whatever packages were copied there.
+    std::error_code ec;
+    for (const auto& e : std::filesystem::directory_iterator(dlc_dir, ec)) {
+      if (ec) break;
+      // Skip hidden files: macOS leaves "._<name>" AppleDouble copies next to every file it writes to a FAT card.
+      if (e.path().filename().string().rfind('.', 0) == 0) continue;
+      if (e.is_regular_file(ec)) list += (list.empty() ? "" : ";") + rex::path_to_utf8(e.path());
+    }
+  }
+#endif
+""", "ds2_dlc.cpp: accept a package dropped into Documents", "add_package")
+
 # --- what the game enumerates: one line in the log, no guessing -------------
 hunk("sdk/src/system/xam/content_manager.cpp",
 """#include <rex/system/xobject.h>
