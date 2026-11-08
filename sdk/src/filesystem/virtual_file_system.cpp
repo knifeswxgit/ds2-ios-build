@@ -15,6 +15,11 @@
 
 #include <rex/filesystem/devices/host_path_entry.h>
 
+#if REX_PLATFORM_IOS
+#include <rex/platform.h>
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+
 REXCVAR_DEFINE_BOOL(allow_game_relative_writes, false, "Filesystem",
                     "Not useful to non-developers. Allows code to write to paths "
                     "relative to game://. Used for "
@@ -104,6 +109,16 @@ bool VirtualFileSystem::ResolveSymbolicLink(const std::string_view path, std::st
 
 Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
   auto global_lock = global_critical_region_.Acquire();
+
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // Diagnostics for the Xbox 360 "compatibility pack" boot dialog: capture
+  // exactly which install:/cache: paths the game probes so the missing
+  // files can be mapped into the game root later.
+  if (rex::string::utf8_starts_with_case(path, "install") ||
+      rex::string::utf8_starts_with_case(path, "cache")) {
+    ds2_ios::DebugMark((std::string("vfs: probe ") + std::string(path)).c_str());
+  }
+#endif
 
   // Resolve relative paths
   auto normalized_path(rex::string::utf8_canonicalize_guest_path(path));

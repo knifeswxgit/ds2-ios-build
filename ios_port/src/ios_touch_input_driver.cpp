@@ -34,6 +34,18 @@ enum : uint16_t {
 
 // Layout shared with the drawn overlay (see ds2_ios/ios_controls_layout.h).
 
+// Maps a raw SDL finger coordinate (0..1 over the whole window) into the
+// safe-area-relative coordinate space the zones live in. The notch/cutout,
+// Home indicator and swipe zones are excluded this way, so drawn buttons
+// and hit zones stay in sync and never sit under system UI.
+void MapToSafeArea(const SDL_Event* e, float* out_x, float* out_y) {
+  float bx0 = 0, by0 = 0, bx1 = 1, by1 = 1;
+  GetTouchAreaBounds(&bx0, &by0, &bx1, &by1);
+  if (bx1 <= bx0 || by1 <= by0) { *out_x = e->tfinger.x; *out_y = e->tfinger.y; return; }
+  *out_x = (e->tfinger.x - bx0) / (bx1 - bx0);
+  *out_y = (e->tfinger.y - by0) / (by1 - by0);
+}
+
 struct StickCapture {
   uint64_t finger = 0;
   float origin_x = 0, origin_y = 0;
@@ -94,7 +106,8 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
 
   switch (e->type) {
     case SDL_EVENT_FINGER_DOWN: {
-      const float x = e->tfinger.x, y = e->tfinger.y;
+      float x, y;
+      MapToSafeArea(e, &x, &y);
       const uint64_t id = static_cast<uint64_t>(e->tfinger.fingerID);
       // Buttons take priority: the right-stick area overlaps the face buttons,
       // and previously taps on A/B/X/Y were swallowed as stick captures.
@@ -130,7 +143,8 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
     }
     case SDL_EVENT_FINGER_MOTION: {
       const uint64_t id = static_cast<uint64_t>(e->tfinger.fingerID);
-      const float x = e->tfinger.x, y = e->tfinger.y;
+      float x, y;
+      MapToSafeArea(e, &x, &y);
       auto apply = [&](StickCapture& s, int16_t& ox, int16_t& oy) {
         if (!s.active || s.finger != id) return;
         const float dx = (x - s.origin_x) / kStickRadius;
@@ -171,6 +185,12 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
     case SDL_EVENT_GAMEPAD_ADDED:
       SDL_OpenGamepad(e->gdevice.which);
       break;
+    case SDL_EVENT_GAMEPAD_REMOVED: {
+      SDL_Gamepad* gp = SDL_GetGamepadFromID(e->gdevice.which);
+      if (gp) SDL_CloseGamepad(gp);
+      Reset();
+      break;
+    }
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_BUTTON_UP: {
       const uint16_t mask = MapGamepadButton(e->gbutton.button);
@@ -214,6 +234,11 @@ IosTouchInputDriver::~IosTouchInputDriver() {
 }
 
 X_STATUS IosTouchInputDriver::Setup() {
+  // Bluetooth / MFi controllers: SDL3 routes GCController (MFi, PS, Xbox)
+  // gamepads through the same SDL_EVENT_GAMEPAD_* events handled below.
+  if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
+    REXLOG_WARN("ds2-ios: SDL_INIT_GAMEPAD failed: {} (touch only)", SDL_GetError());
+  }
   if (!SDL_AddEventWatch(&EventWatch, this)) {
     REXLOG_ERROR("ds2-ios: SDL_AddEventWatch failed: {}", SDL_GetError());
     return X_STATUS_UNSUCCESSFUL;

@@ -1366,6 +1366,40 @@ hunk("sdk/src/graphics/vulkan/pipeline_cache.cpp",
   }""", "pipeline_cache: iOS writable shader storage + non-throwing mkdir", 'shader storage root=')
 
 
+# Diagnostics: log every install:/cache: probe so the Xbox 360
+# "compatibility pack" boot dialog can be traced to the missing files.
+hunk("sdk/src/filesystem/virtual_file_system.cpp",
+"""#include <rex/filesystem/devices/host_path_entry.h>
+""",
+"""#include <rex/filesystem/devices/host_path_entry.h>
+
+#if REX_PLATFORM_IOS
+#include <rex/platform.h>
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+""", "virtual_file_system: iOS diagnostics include", 'ds2_ios/ios_log_overlay.h')
+
+hunk("sdk/src/filesystem/virtual_file_system.cpp",
+"""Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
+  auto global_lock = global_critical_region_.Acquire();
+
+  // Resolve relative paths""",
+"""Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
+  auto global_lock = global_critical_region_.Acquire();
+
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // Diagnostics for the Xbox 360 "compatibility pack" boot dialog: capture
+  // exactly which install:/cache: paths the game probes so the missing
+  // files can be mapped into the game root later.
+  if (rex::string::utf8_starts_with_case(path, "install") ||
+      rex::string::utf8_starts_with_case(path, "cache")) {
+    ds2_ios::DebugMark((std::string("vfs: probe ") + std::string(path)).c_str());
+  }
+#endif
+
+  // Resolve relative paths""",
+"virtual_file_system: probe diagnostics mark", 'vfs: probe ')
+
 hunk("sdk/src/core/filesystem_posix.cpp",
 """#include <mach-o/dyld.h>
 """,

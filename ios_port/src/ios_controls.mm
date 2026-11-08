@@ -50,24 +50,26 @@ void RelayoutZoneViews();  // defined below, in the namespace
 namespace ds2_ios {
 
 // ---------------------------------------------------------------------------
-// Default layout (landscape, normalized 0..1). Button masks are
-// X_INPUT_GAMEPAD_* values. button == 0 marks an analog trigger zone.
+// Default layout (landscape, normalized 0..1 WITHIN THE SAFE AREA, see
+// GetTouchAreaBounds). Button masks are X_INPUT_GAMEPAD_* values.
+// button == 0 marks an analog trigger zone. Zones never overlap each other
+// and the center of the screen stays clear for the game.
 // ---------------------------------------------------------------------------
 const TouchZone kDefaultTouchZones[] = {
-    {0.82f, 0.40f, 0.90f, 0.55f, 0x1000, "A"},
-    {0.91f, 0.40f, 0.99f, 0.55f, 0x2000, "B"},
-    {0.82f, 0.24f, 0.90f, 0.39f, 0x4000, "X"},
-    {0.91f, 0.24f, 0.99f, 0.39f, 0x8000, "Y"},
-    {0.00f, 0.28f, 0.08f, 0.38f, 0x0100, "LB"},
-    {0.92f, 0.28f, 1.00f, 0.38f, 0x0200, "RB"},
-    {0.00f, 0.15f, 0.08f, 0.25f, 0x0000, "LT"},
-    {0.92f, 0.15f, 1.00f, 0.25f, 0x0000, "RT"},
-    {0.40f, 0.00f, 0.50f, 0.07f, 0x0010, "START"},
-    {0.50f, 0.00f, 0.60f, 0.07f, 0x0020, "BACK"},
-    {0.00f, 0.44f, 0.05f, 0.52f, 0x0001, "^"},
-    {0.00f, 0.52f, 0.05f, 0.60f, 0x0002, "v"},
-    {0.05f, 0.44f, 0.10f, 0.52f, 0x0004, "<"},
-    {0.05f, 0.52f, 0.10f, 0.60f, 0x0008, ">"},
+    {0.840f, 0.530f, 0.920f, 0.660f, 0x1000, "A"},
+    {0.930f, 0.390f, 1.000f, 0.520f, 0x2000, "B"},
+    {0.750f, 0.390f, 0.830f, 0.520f, 0x4000, "X"},
+    {0.840f, 0.240f, 0.920f, 0.370f, 0x8000, "Y"},
+    {0.000f, 0.050f, 0.070f, 0.135f, 0x0100, "LB"},
+    {0.930f, 0.050f, 1.000f, 0.135f, 0x0200, "RB"},
+    {0.000f, 0.145f, 0.070f, 0.230f, 0x0000, "LT"},
+    {0.930f, 0.145f, 1.000f, 0.230f, 0x0000, "RT"},
+    {0.400f, 0.000f, 0.495f, 0.060f, 0x0010, "START"},
+    {0.505f, 0.000f, 0.600f, 0.060f, 0x0020, "BACK"},
+    {0.000f, 0.420f, 0.050f, 0.500f, 0x0001, "^"},
+    {0.000f, 0.510f, 0.050f, 0.590f, 0x0002, "v"},
+    {0.055f, 0.420f, 0.105f, 0.500f, 0x0004, "<"},
+    {0.055f, 0.510f, 0.105f, 0.590f, 0x0008, ">"},
 };
 const int kDefaultTouchZoneCount =
     static_cast<int>(sizeof(kDefaultTouchZones) / sizeof(kDefaultTouchZones[0]));
@@ -81,8 +83,36 @@ UIButton* g_gear = nil;             // single settings button
 UIView* g_panel = nil;              // settings panel
 bool g_edit_mode = false;
 
-NSString* const kLayoutKey = @"ds2_touch_layout_v1";
+// Safe area in normalized window coords: the notch/cutout, Home indicator
+// and system swipe zones are excluded. Zones are positioned inside this
+// rectangle, both when drawn and when hit-tested by the input driver.
+float g_bx0 = 0.0f, g_by0 = 0.0f, g_bx1 = 1.0f, g_by1 = 1.0f;
+
+NSString* const kLayoutKey = @"ds2_touch_layout_v2";  // v2: no-overlap table
 NSString* const kScaleKey = @"ds2_display_scale_v1";
+
+void UpdateSafeBounds() {
+  g_bx0 = 0.0f; g_by0 = 0.0f; g_bx1 = 1.0f; g_by1 = 1.0f;
+  UIWindow* w = g_root.window ?: nil;
+  if (!w) return;
+  const CGSize s = w.bounds.size;
+  if (s.width < 1 || s.height < 1) return;
+  UIEdgeInsets ins = UIEdgeInsetsZero;
+  if (@available(iOS 11.0, *)) ins = w.safeAreaInsets;
+  g_bx0 = (float)(ins.left / s.width);
+  g_bx1 = (float)((s.width - ins.right) / s.width);
+  g_by0 = (float)(ins.top / s.height);
+  g_by1 = (float)((s.height - ins.bottom) / s.height);
+  if (g_bx1 <= g_bx0 + 0.05f || g_by1 <= g_by0 + 0.05f) {
+    g_bx0 = 0.0f; g_by0 = 0.0f; g_bx1 = 1.0f; g_by1 = 1.0f;  // paranoia
+  }
+}
+
+// Map a normalized safe-area coordinate to absolute window pixels.
+CGFloat MapX(float nx) { return g_root.bounds.size.width * (g_bx0 + (g_bx1 - g_bx0) * nx); }
+CGFloat MapY(float ny) { return g_root.bounds.size.height * (g_by0 + (g_by1 - g_by0) * ny); }
+CGFloat ScaleX(float v) { return g_root.bounds.size.width * (g_bx1 - g_bx0) * v; }
+CGFloat ScaleY(float v) { return g_root.bounds.size.height * (g_by1 - g_by0) * v; }
 
 // ---------------------------------------------------------------------------
 // Layout storage
@@ -204,36 +234,37 @@ void StyleZoneView(UIView* v, const char* label) {
 
 void AddStickRing(CGFloat cx, CGFloat cy, CGFloat diameter) {
   UIView* ring = [[UIView alloc] initWithFrame:CGRectZero];
-  ring.layer.borderColor = [UIColor.systemBlueColor colorWithAlphaComponent:0.55].CGColor;
-  ring.layer.borderWidth = 2;
+  ring.layer.borderColor =
+      [UIColor.systemBlueColor colorWithAlphaComponent:0.18].CGColor;
+  ring.layer.borderWidth = 1.5;
   ring.layer.cornerRadius = diameter / 2;
-  ring.backgroundColor = [UIColor.systemBlueColor colorWithAlphaComponent:0.08];
+  ring.backgroundColor = [UIColor.systemBlueColor colorWithAlphaComponent:0.02];
   ring.tag = 0x53544B31;  // "STK1"
   ring.userInteractionEnabled = NO;
   [g_root addSubview:ring];
-  // Position relative to root; re-fit on layout.
-  ring.frame = CGRectMake(g_root.bounds.size.width * cx - diameter / 2,
-                          g_root.bounds.size.height * cy - diameter / 2,
-                          diameter, diameter);
+  ring.frame = CGRectMake(MapX((float)cx) - diameter / 2,
+                          MapY((float)cy) - diameter / 2, diameter, diameter);
 }
 
 void LayoutZoneViews() {
   if (!g_root) return;
-  const CGSize s = g_root.bounds.size;
+  UpdateSafeBounds();
   for (size_t i = 0; i < g_zone_views.size() && i < g_zones.size(); ++i) {
     const TouchZone& z = g_zones[i];
     UIView* v = g_zone_views[i];
-    v.frame = CGRectMake(s.width * z.x0, s.height * z.y0,
-                         s.width * (z.x1 - z.x0), s.height * (z.y1 - z.y0));
+    v.frame = CGRectMake(MapX(z.x0), MapY(z.y0), ScaleX(z.x1 - z.x0),
+                         ScaleY(z.y1 - z.y0));
   }
-  const CGFloat ring_d = s.width * 0.20f;
+  // Stick rings: visual hints in the lower corners of the safe area.
+  const CGFloat ring_d = ScaleX(0.20f);
+  bool first = true;
   for (UIView* sub in g_root.subviews) {
     if (sub.tag != 0x53544B31) continue;
-    if (sub.frame.origin.x < s.width * 0.5f) {
-      sub.frame = CGRectMake(s.width * 0.06f, s.height * 0.62f, ring_d, ring_d);
-    } else {
-      sub.frame = CGRectMake(s.width * 0.94f - ring_d, s.height * 0.62f, ring_d, ring_d);
-    }
+    const CGFloat cx = first ? 0.13f : 0.87f;
+    const CGFloat cy = 0.80f;
+    first = false;
+    sub.frame = CGRectMake(MapX((float)cx) - ring_d / 2, MapY((float)cy) - ring_d / 2,
+                           ring_d, ring_d);
   }
 }
 
@@ -250,12 +281,12 @@ void HandleZonePan(UIPanGestureRecognizer* pan) {
   [pan setTranslation:CGPointZero inView:g_root];
   const CGSize s = g_root.bounds.size;
   if (s.width < 1 || s.height < 1) return;
-  const float dx = (float)(t.x / s.width);
-  const float dy = (float)(t.y / s.height);
+  const float dx = (float)(t.x / (s.width * (g_bx1 - g_bx0)));
+  const float dy = (float)(t.y / (s.height * (g_by1 - g_by0)));
   TouchZone& z = g_zones[(size_t)idx];
   SetTouchZoneRect(idx, z.x0 + dx, z.y0 + dy, z.x1 + dx, z.y1 + dy);
-  v.frame = CGRectMake(s.width * z.x0, s.height * z.y0,
-                       s.width * (z.x1 - z.x0), s.height * (z.y1 - z.y0));
+  v.frame = CGRectMake(MapX(z.x0), MapY(z.y0), ScaleX(z.x1 - z.x0),
+                       ScaleY(z.y1 - z.y0));
   if (pan.state == UIGestureRecognizerStateEnded) PersistZones();
 }
 
@@ -367,6 +398,10 @@ void ResetTouchZones() {
 
 void RelayoutZoneViews() { LayoutZoneViews(); }
 
+void GetTouchAreaBounds(float* x0, float* y0, float* x1, float* y1) {
+  *x0 = g_bx0; *y0 = g_by0; *x1 = g_bx1; *y1 = g_by1;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -405,10 +440,11 @@ void InstallControlsOverlay() {
   root.backgroundColor = UIColor.clearColor;
   g_root = root;
   [window addSubview:root];
+  UpdateSafeBounds();
 
   // Stick rings (visual only; stick capture is the lower left/right quadrant).
-  AddStickRing(0.16f, 0.72f, window.bounds.size.width * 0.20f);
-  AddStickRing(0.84f, 0.72f, window.bounds.size.width * 0.20f);
+  AddStickRing(0.13f, 0.80f, window.bounds.size.width * 0.20f);
+  AddStickRing(0.87f, 0.80f, window.bounds.size.width * 0.20f);
 
   // Zone views + drag recognizers.
   for (int i = 0; i < GetTouchZoneCount(); ++i) {
@@ -431,9 +467,10 @@ void InstallControlsOverlay() {
   }
   LayoutZoneViews();
 
-  // Single settings button ("SET").
+  // Single settings button ("SET"): top-center, right of BACK, inside the
+  // safe area. It must NOT sit on top of any touch zone (it swallows taps).
   g_gear = [UIButton buttonWithType:UIButtonTypeSystem];
-  g_gear.frame = CGRectMake(window.bounds.size.width * 0.62f, 4, 56, 22);
+  g_gear.frame = CGRectMake(MapX(0.615f), MapY(0.0f) + 2, 56, 22);
   g_gear.autoresizingMask =
       UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
   [g_gear setTitle:@"SET" forState:UIControlStateNormal];
@@ -454,11 +491,11 @@ void InstallControlsOverlay() {
   [g_gear addTarget:gear_action action:@selector(invoke:)
    forControlEvents:UIControlEventTouchUpInside];
 
-  // Settings panel (hidden by default).
+  // Settings panel (hidden by default), inside the safe area.
   const CGFloat panel_w = 228, panel_h = 240;
   g_panel = [[UIView alloc]
-      initWithFrame:CGRectMake(window.bounds.size.width - panel_w - 8, 30, panel_w,
-                               panel_h)];
+      initWithFrame:CGRectMake(MapX(1.0f) - panel_w - 8, MapY(0.0f) + 30,
+                               panel_w, panel_h)];
   g_panel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
   g_panel.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.85];
   g_panel.layer.cornerRadius = 10;

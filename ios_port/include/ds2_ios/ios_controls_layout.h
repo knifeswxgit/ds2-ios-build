@@ -29,6 +29,12 @@ extern const int kDefaultTouchZoneCount;
 const TouchZone* GetTouchZones();
 int GetTouchZoneCount();
 
+// The interactive touch area in normalized window coordinates: the iPhone
+// safe area (notch/cutout, Home indicator, system swipe zones) is excluded.
+// Zone coordinates are relative to this rectangle; the input driver maps
+// finger coordinates through it before hit-testing.
+void GetTouchAreaBounds(float* x0, float* y0, float* x1, float* y1);
+
 // Move/resize one zone (clamped to the screen, kept non-degenerate).
 void SetTouchZoneRect(int index, float x0, float y0, float x1, float y1);
 void ResetTouchZones();
