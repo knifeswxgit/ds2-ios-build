@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "ds2_ios/ios_paths.h"
+#include "ds2_ios/ios_controls_layout.h"
 
 namespace ds2_ios {
 namespace {
@@ -91,16 +92,12 @@ void InstallTouchOverlay() {
   ring(CGRectMake(w * 0.04, h * 0.55, w * 0.22, w * 0.22), stick);   // left stick
   ring(CGRectMake(w * 0.74, h * 0.55, w * 0.22, w * 0.22), stick);   // right stick
 
-  // Face buttons (A/B/X/Y) - keep in sync with kZones in ios_touch_input_driver.cpp.
-  box(CGRectMake(w * 0.88, h * 0.42, 52, 52), @"A");
-  box(CGRectMake(w * 0.94, h * 0.28, 52, 52), @"B");
-  box(CGRectMake(w * 0.82, h * 0.28, 52, 52), @"X");
-  box(CGRectMake(w * 0.88, h * 0.14, 52, 52), @"Y");
-  box(CGRectMake(w * 0.02, h * 0.30, 62, 30), @"LB");
-  box(CGRectMake(w * 0.94, h * 0.30, 62, 30), @"RB");
-  box(CGRectMake(w * 0.02, h * 0.14, 62, 30), @"LT");
-  box(CGRectMake(w * 0.94, h * 0.14, 62, 30), @"RT");
-  box(CGRectMake(w * 0.46, h * 0.02, 52, 26), @"MENU");
+  // Draw exactly the same normalized rectangles the input driver hit-tests,
+  // so every drawn button is pressable and nothing hangs off the right edge.
+  for (const auto& z : kTouchZones) {
+    box(CGRectMake(w * z.x0, h * z.y0, w * (z.x1 - z.x0), h * (z.y1 - z.y0)),
+        [NSString stringWithUTF8String:z.label]);
+  }
 
   [root addSubview:overlay];
 }

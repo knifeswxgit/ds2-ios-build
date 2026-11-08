@@ -411,15 +411,25 @@ void InstallLogOverlay() {
         }
         return;
       }
+      // A real button instead of a triple-tap gesture: the gesture swallowed
+      // taps near the top-center START zone and was impossible to hit in game.
       DS2TapProxy* proxy = [[DS2TapProxy alloc] init];
       proxy.onTap = ^{ dispatch_async(dispatch_get_main_queue(), ^{ ToggleOverlay(); }); };
-      UITapGestureRecognizer* tap =
-          [[UITapGestureRecognizer alloc] initWithTarget:proxy action:NSSelectorFromString(@"tap:")];
-      tap.numberOfTapsRequired = 3;
-      tap.cancelsTouchesInView = NO;  // game input keeps working
-      proxy.gesture = tap;
-      objc_setAssociatedObject(window, "ds2_log_tap_proxy", proxy, OBJC_ASSOCIATION_RETAIN);
-      [window addGestureRecognizer:tap];
+      UIButton* log_button = [UIButton buttonWithType:UIButtonTypeRoundedRect];
+      log_button.frame = CGRectMake(CGRectGetWidth(window.bounds) * 0.34f, 4, 54, 22);
+      log_button.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
+                                    UIViewAutoresizingFlexibleRightMargin;
+      [log_button setTitle:@"LOG" forState:UIControlStateNormal];
+      [log_button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+      log_button.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+      log_button.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.45];
+      log_button.layer.cornerRadius = 5;
+      log_button.alpha = 0.65;
+      [log_button addTarget:proxy action:NSSelectorFromString(@"tap:")
+           forControlEvents:UIControlEventTouchUpInside];
+      objc_setAssociatedObject(window, "ds2_log_button_proxy", proxy, OBJC_ASSOCIATION_RETAIN);
+      [window addSubview:log_button];
+      [window bringSubviewToFront:log_button];
     };
     try_install();
   });

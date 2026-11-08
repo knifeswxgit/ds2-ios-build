@@ -1348,6 +1348,27 @@ hunk("sdk/src/graphics/vulkan/pipeline_cache.cpp",
   }""", "pipeline_cache: iOS writable shader storage + non-throwing mkdir", 'shader storage root=')
 
 
+hunk("sdk/src/core/filesystem_posix.cpp",
+"""#include <mach-o/dyld.h>
+""",
+"""#include <mach-o/dyld.h>
+#include <rex/platform.h>
+#if REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
+""", "filesystem_posix: iOS includes", 'ds2_ios/ios_paths.h')
+
+hunk("sdk/src/core/filesystem_posix.cpp",
+"""std::filesystem::path GetUserFolder() {
+#if defined(__SWITCH__)""",
+"""std::filesystem::path GetUserFolder() {
+#if REX_PLATFORM_IOS
+  // iOS forbids writes outside Documents/Library/tmp; HOME/.local/share would
+  // fail with EPERM and the game shows "save data creation error".
+  return ds2_ios::DocumentsPath() / "user";
+#elif defined(__SWITCH__)""", "filesystem_posix: iOS writable user folder", 'DocumentsPath() / "user"')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="path to the DS2_switch clone")

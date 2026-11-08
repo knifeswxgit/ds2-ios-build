@@ -22,6 +22,10 @@
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
+#include <rex/platform.h>
+#if REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
 #endif
 
 #include <rex/assert.h>
@@ -137,7 +141,11 @@ std::filesystem::path GetExecutableFolder() {
 }
 
 std::filesystem::path GetUserFolder() {
-#if defined(__SWITCH__)
+#if REX_PLATFORM_IOS
+  // iOS forbids writes outside Documents/Library/tmp; HOME/.local/share would
+  // fail with EPERM and the game shows "save data creation error".
+  return ds2_ios::DocumentsPath() / "user";
+#elif defined(__SWITCH__)
   // Horizon has no XDG_DATA_HOME, no HOME and no user database. The branch below
   // would end up in pw->pw_dir with pw NULL and kill the process at startup:
   // rex_app.cpp calls it to decide the data folder. On Switch the data goes next

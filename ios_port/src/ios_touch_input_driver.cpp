@@ -31,22 +31,8 @@ enum : uint16_t {
   kA = 0x1000, kB = 0x2000, kX = 0x4000, kY = 0x8000,
 };
 
-// Normalized landscape coordinates (0..1, origin top-left).
-struct Zone {
-  float x0, y0, x1, y1;
-  uint16_t button;
-};
-constexpr Zone kZones[] = {
-    {0.88f, 0.42f, 0.96f, 0.62f, kA},      {0.94f, 0.28f, 1.00f, 0.44f, kB},
-    {0.82f, 0.28f, 0.88f, 0.44f, kX},      {0.88f, 0.14f, 0.96f, 0.28f, kY},
-    {0.00f, 0.30f, 0.10f, 0.42f, kLB},     {0.90f, 0.30f, 1.00f, 0.42f, kRB},
-    {0.00f, 0.14f, 0.10f, 0.26f, 0},       // LT (analog trigger, handled below)
-    {0.90f, 0.14f, 1.00f, 0.26f, 0},       // RT
-    {0.46f, 0.00f, 0.54f, 0.10f, kStart},  {0.54f, 0.00f, 0.62f, 0.10f, kBack},
-    // D-pad split into four quadrants.
-    {0.00f, 0.00f, 0.09f, 0.07f, kDUp},    {0.00f, 0.07f, 0.09f, 0.14f, kDDown},
-    {0.00f, 0.00f, 0.045f, 0.14f, kDLeft}, {0.045f, 0.00f, 0.09f, 0.14f, kDRight},
-};
+// Layout shared with the drawn overlay (see ds2_ios/ios_controls_layout.h).
+#include "ds2_ios/ios_controls_layout.h"
 
 struct StickCapture {
   uint64_t finger = 0;
@@ -106,19 +92,25 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
     case SDL_EVENT_FINGER_DOWN: {
       const float x = e->tfinger.x, y = e->tfinger.y;
       const uint64_t id = static_cast<uint64_t>(e->tfinger.fingerID);
-      if (x < 0.35f && y > 0.45f) {
+      // Buttons take priority: the right-stick area overlaps the face buttons,
+      // and previously taps on A/B/X/Y were swallowed as stick captures.
+      uint16_t mask = 0;
+      bool in_zone = false;
+      for (const auto& z : kTouchZones) {
+        if (x >= z.x0 && x < z.x1 && y >= z.y0 && y < z.y1) {
+          mask = z.button;
+          in_zone = true;
+          break;
+        }
+      }
+      if (in_zone) {
+        if (x < 0.10f && y >= 0.16f && y < 0.26f) { state_.lt = 255; mark(); }
+        else if (x > 0.90f && y >= 0.16f && y < 0.26f) { state_.rt = 255; mark(); }
+        if (mask) { touch_buttons[id] = mask; state_.buttons |= mask; mark(); }
+      } else if (x < 0.35f && y > 0.45f) {
         left_stick = {id, x, y, true};
       } else if (x > 0.65f && y > 0.45f) {
         right_stick = {id, x, y, true};
-      } else {
-        uint16_t mask = 0;
-        for (const auto& z : kZones) {
-          if (x >= z.x0 && x < z.x1 && y >= z.y0 && y < z.y1) { mask = z.button; break; }
-        }
-        // LT/RT are analog: hold the trigger fully instead of a button bit.
-        if (x < 0.10f && y >= 0.14f && y < 0.26f) { state_.lt = 255; mark(); }
-        else if (x > 0.90f && y >= 0.14f && y < 0.26f) { state_.rt = 255; mark(); }
-        if (mask) { touch_buttons[id] = mask; state_.buttons |= mask; mark(); }
       }
       break;
     }
