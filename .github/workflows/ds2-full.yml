@@ -458,6 +458,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # GBox reads sourceUpdateTime to decide whether to re-parse the app list,
+      # so bump version + timestamp on every build and commit it back.
+      - name: Refresh GBox source (ds2.appsrc)
+        if: ${{ hashFiles('ds2-ios.ipa') != '' }}
+        run: |
+          VER="$(date -u +'%Y.%m.%d.%H%M')"
+          STAMP="$(date -u +'%Y-%m-%dT%H:%M:%S+0000')"
+          python3 - "$VER" "$STAMP" <<'PY'
+          import json, sys
+          ver, stamp = sys.argv[1], sys.argv[2]
+          p = 'gbox/ds2.appsrc'
+          src = json.load(open(p, encoding='utf-8'))
+          src['sourceUpdateTime'] = stamp
+          for app in src['appRepositories']:
+              if app.get('appType') != 'LINK':
+                  app['appUpdateTime'] = stamp
+                  app['appVersion'] = ver
+          json.dump(src, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=4)
+          print('gbox source ->', ver)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet gbox/ds2.appsrc; then
+            git add gbox/ds2.appsrc
+            git commit -m "gbox: bump source to $VER [skip ci]"
+            git push
+          fi
+
 # KNOWN INTEGRATION ITEMS (will surface on the first build):
 #  - iOS app delegate / UIKit UI loop + CAMetalLayer + CADisplayLink is not
 #    written yet; the current app/src/main.cpp starts the host/PC loop.

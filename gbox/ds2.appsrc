@@ -1,0 +1,25 @@
+{
+    "version": "1.1.2",
+    "sourceName": "DS2 iOS (knifeswxgit)",
+    "sourceAuthor": "knifeswxgit",
+    "sourceLinkTitle": "Репозиторий",
+    "sourceLinkUrl": "https://github.com/knifeswxgit/ds2-ios-build",
+    "sourceImage": "https://raw.githubusercontent.com/knifeswxgit/ds2-ios-build/main/gbox/icon.png",
+    "sourceUpdateTime": "2026-11-08T05:35:00+0000",
+    "sourceDescription": "Dark Souls II iOS port — свежие сборки автоматически. Установка: скачать, подписать своим Apple ID в GBox, установить. Игровые данные (game_root, ds2_shaders.spvz) заливаются отдельно.",
+    "appCategories": [
+        "Игры"
+    ],
+    "appRepositories": [
+        {
+            "appType": "SELF_SIGN",
+            "appCateIndex": 0,
+            "appUpdateTime": "2026-11-08T05:35:00+0000",
+            "appName": "Dark Souls II",
+            "appVersion": "2026.11.08.0445",
+            "appImage": "https://raw.githubusercontent.com/knifeswxgit/ds2-ios-build/main/gbox/icon.png",
+            "appPackage": "https://github.com/knifeswxgit/ds2-ios-build/releases/download/ds2-ios-latest/ds2-ios.ipa",
+            "appDescription": "Dark Souls II: Scholar of the First Sin — порт для iOS (arm64, MoltenVK). Неподписанный .ipa: скачай из источника, подпиши в GBox своим Apple ID и установи. Логи в игре: 3 тапа по верхней центральной части экрана."
+        }
+    ]
+}
