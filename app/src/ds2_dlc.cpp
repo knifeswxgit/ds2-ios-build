@@ -2,6 +2,11 @@
 
 #include "ds2_dlc.h"
 
+#include <rex/platform.h>
+#if REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
+
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/logging.h>
@@ -124,10 +129,17 @@ void InstallConfigured(rex::Runtime* runtime) {
   const auto exe_dir = rex::filesystem::GetExecutableFolder();
   if (!exe_dir.empty()) ImportCalibration(exe_dir);
   std::string list = REXCVAR_GET(ds2_install_dlc);
-  if (list.empty() && !exe_dir.empty()) {
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // On iOS the game data lives in Documents, not next to the executable (the
+  // .app bundle is read-only), so the DLC packages are looked up there.
+  const std::filesystem::path dlc_dir = ds2_ios::DocumentsPath() / "dlc";
+#else
+  const std::filesystem::path dlc_dir = exe_dir / "dlc";
+#endif
+  if (list.empty() && !dlc_dir.empty()) {
     // Portable layout (sdmc:/switch/ds2/dlc/ on the Switch): install whatever packages were copied there.
     std::error_code ec;
-    for (const auto& e : std::filesystem::directory_iterator(exe_dir / "dlc", ec)) {
+    for (const auto& e : std::filesystem::directory_iterator(dlc_dir, ec)) {
       if (ec) break;
       // Skip hidden files: macOS leaves "._<name>" AppleDouble copies next to every file it writes to a FAT card.
       if (e.path().filename().string().rfind('.', 0) == 0) continue;

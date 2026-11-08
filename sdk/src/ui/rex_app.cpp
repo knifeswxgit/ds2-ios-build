@@ -199,8 +199,18 @@ bool ReXApp::SetupEnvironment() {
   std::string log_level_str = REXCVAR_GET(log_level);
   if (REXCVAR_GET(log_verbose) && log_level_str == "info")
     log_level_str = "trace";
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // iOS diagnostics: the content manager traces ("[guardado] ...") are INFO
+  // while the shipped config asks for "warn" to save IO. Without them there is
+  // no way to see what the game asks for when it claims the compatibility
+  // pack is missing.
+  log_level_str = "info";
+#endif
 
   auto category_levels = rex::ParseCategoryLevelsFromConfig(config_path_);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  category_levels.clear();
+#endif
   auto log_config = rex::BuildLogConfig(log_file_cvar.empty() ? nullptr : log_file_cvar.c_str(),
                                         log_level_str, category_levels);
   if (log_file_cvar.empty()) {

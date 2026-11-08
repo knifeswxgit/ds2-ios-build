@@ -31,6 +31,11 @@
 #include <rex/system/xfile.h>
 #include <rex/system/xobject.h>
 
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include <rex/platform.h>
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+
 /*
  * Readable copy of the saves and a trace of what happens to them.
  *
@@ -364,6 +369,10 @@ std::vector<XCONTENT_AGGREGATE_DATA> ContentManager::ListContent(uint32_t device
   // What the game sees when it asks for the list of saves. If a profile that exists on disk does not show
   // up here, the problem is the enumeration; if it shows up and is then reported as damaged, the problem
   // is its contents.
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  ds2_ios::DebugMark(("content: list " + rex::path_to_utf8(package_root) + " -> " +
+                       std::to_string(result.size()) + " item(s)").c_str());
+#endif
   REXSYS_INFO("[guardado] listar tipo {:08X} en {}: {} entrada(s)", uint32_t(content_type),
               rex::path_to_utf8(package_root), result.size());
   for (const auto& entrada : result) {

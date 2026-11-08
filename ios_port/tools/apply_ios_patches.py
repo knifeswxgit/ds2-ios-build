@@ -1420,6 +1420,143 @@ hunk("sdk/src/core/filesystem_posix.cpp",
   return ds2_ios::DocumentsPath() / "user";
 #elif defined(__SWITCH__)""", "filesystem_posix: iOS writable user folder", 'DocumentsPath() / "user"')
 
+# --- compatibility pack: the game creates a marker on install: ------------
+# DS2 reads and then CREATES "install:\DL<hash>" and, when that fails, shows
+# "the compatibility pack is missing / insert the installation disc". The game
+# root device is mounted read-only, so the create ends in ACCESS_DENIED.
+hunk("sdk/src/system/runtime.cpp",
+"""#include "ds2_ios/ios_log_overlay.h"
+""",
+"""#include "ds2_ios/ios_log_overlay.h"
+#include "ds2_ios/ios_paths.h"
+""", "runtime.cpp: iOS paths include", '#include "ds2_ios/ios_paths.h"')
+
+hunk("sdk/src/system/runtime.cpp",
+"""#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // DS2 probes install:\\ for the compatibility pack; without this link the
+  // game aborts with "insert the installation disc".
+  file_system_->RegisterSymbolicLink("install:", mount_path);
+#endif
+""",
+"""#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // DS2 probes install:\\ for the compatibility pack: it reads and then CREATES
+  // a marker file there ("DL<hash>"). The game root device is mounted
+  // read-only, so the create fails with ACCESS_DENIED and the game shows
+  // "the compatibility pack is missing / insert the installation disc".
+  // install: gets its own writable device under Documents.
+  auto install_root = std::filesystem::absolute(ds2_ios::DocumentsPath() / "install");
+  {
+    std::error_code iec;
+    std::filesystem::create_directories(install_root, iec);
+  }
+  auto install_mount = "\\\\Device\\\\Harddisk0\\\\PartitionInstall";
+  auto install_device =
+      std::make_unique<rex::filesystem::HostPathDevice>(install_mount, install_root, false);
+  if (install_device->Initialize() && file_system_->RegisterDevice(std::move(install_device))) {
+    file_system_->RegisterSymbolicLink("install:", install_mount);
+  }
+#endif
+""", "runtime.cpp: writable install: device", "PartitionInstall")
+
+# --- diagnostics: the content manager traces are INFO, the config asks warn --
+hunk("sdk/src/ui/rex_app.cpp",
+"""  std::string log_level_str = REXCVAR_GET(log_level);
+  if (REXCVAR_GET(log_verbose) && log_level_str == "info")
+    log_level_str = "trace";
+
+  auto category_levels = rex::ParseCategoryLevelsFromConfig(config_path_);
+""",
+"""  std::string log_level_str = REXCVAR_GET(log_level);
+  if (REXCVAR_GET(log_verbose) && log_level_str == "info")
+    log_level_str = "trace";
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // iOS diagnostics: the content manager traces ("[guardado] ...") are INFO
+  // while the shipped config asks for "warn" to save IO. Without them there is
+  // no way to see what the game asks for when it claims the compatibility
+  // pack is missing.
+  log_level_str = "info";
+#endif
+
+  auto category_levels = rex::ParseCategoryLevelsFromConfig(config_path_);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  category_levels.clear();
+#endif
+""", "rex_app.cpp: iOS log level info", "category_levels.clear();")
+
+# --- the config lives in Documents, so it can be changed without a rebuild --
+hunk("app/src/ds2_app.h",
+"""    if (paths.config_path.empty()) paths.config_path = ds2_ios::BundlePath() / "ds2.toml";
+""",
+"""    if (paths.config_path.empty()) {
+      // The config stays editable without a rebuild: Documents/ds2.toml wins
+      // and the bundled copy is only the template copied on the first launch.
+      const std::filesystem::path docs_cfg = docs / "ds2.toml";
+      const std::filesystem::path bundle_cfg = ds2_ios::BundlePath() / "ds2.toml";
+      std::error_code cec;
+      if (!std::filesystem::exists(docs_cfg, cec)) {
+        std::error_code cperr;
+        std::filesystem::copy_file(bundle_cfg, docs_cfg,
+                                   std::filesystem::copy_options::overwrite_existing, cperr);
+      }
+      paths.config_path = docs_cfg;
+    }
+""", "ds2_app.h: config in Documents", "docs_cfg")
+
+# --- DLC packages live in Documents on iOS, not next to the read-only bundle -
+hunk("app/src/ds2_dlc.cpp",
+"""#include "ds2_dlc.h"
+""",
+"""#include "ds2_dlc.h"
+
+#include <rex/platform.h>
+#if REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
+""", "ds2_dlc.cpp: iOS includes", '#include "ds2_ios/ios_paths.h"')
+
+hunk("app/src/ds2_dlc.cpp",
+"""  std::string list = REXCVAR_GET(ds2_install_dlc);
+  if (list.empty() && !exe_dir.empty()) {
+    // Portable layout (sdmc:/switch/ds2/dlc/ on the Switch): install whatever packages were copied there.
+    std::error_code ec;
+    for (const auto& e : std::filesystem::directory_iterator(exe_dir / "dlc", ec)) {
+""",
+"""  std::string list = REXCVAR_GET(ds2_install_dlc);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // On iOS the game data lives in Documents, not next to the executable (the
+  // .app bundle is read-only), so the DLC packages are looked up there.
+  const std::filesystem::path dlc_dir = ds2_ios::DocumentsPath() / "dlc";
+#else
+  const std::filesystem::path dlc_dir = exe_dir / "dlc";
+#endif
+  if (list.empty() && !dlc_dir.empty()) {
+    // Portable layout (sdmc:/switch/ds2/dlc/ on the Switch): install whatever packages were copied there.
+    std::error_code ec;
+    for (const auto& e : std::filesystem::directory_iterator(dlc_dir, ec)) {
+""", "ds2_dlc.cpp: DLC folder in Documents", "dlc_dir")
+
+# --- what the game enumerates: one line in the log, no guessing -------------
+hunk("sdk/src/system/xam/content_manager.cpp",
+"""#include <rex/system/xobject.h>
+""",
+"""#include <rex/system/xobject.h>
+
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include <rex/platform.h>
+#include "ds2_ios/ios_log_overlay.h"
+#endif
+""", "content_manager.cpp: iOS includes", '#include "ds2_ios/ios_log_overlay.h"')
+
+hunk("sdk/src/system/xam/content_manager.cpp",
+"""  REXSYS_INFO("[guardado] listar tipo {:08X} en {}: {} entrada(s)", uint32_t(content_type),
+""",
+"""#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  ds2_ios::DebugMark(("content: list " + rex::path_to_utf8(package_root) + " -> " +
+                       std::to_string(result.size()) + " item(s)").c_str());
+#endif
+  REXSYS_INFO("[guardado] listar tipo {:08X} en {}: {} entrada(s)", uint32_t(content_type),
+""", "content_manager.cpp: list trace", "content: list ")
+
 
 def main():
     ap = argparse.ArgumentParser()

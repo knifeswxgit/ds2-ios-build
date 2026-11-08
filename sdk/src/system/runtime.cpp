@@ -17,6 +17,7 @@
 #include <rex/logging.h>
 #if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
 #include "ds2_ios/ios_log_overlay.h"
+#include "ds2_ios/ios_paths.h"
 #endif
 #include <rex/perf/counter.h>
 #include <rex/ppc/context.h>          // PPCFuncMapping
@@ -332,9 +333,22 @@ bool Runtime::SetupVfs() {
   file_system_->RegisterSymbolicLink("game:", mount_path);
   file_system_->RegisterSymbolicLink("d:", mount_path);
 #if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
-  // DS2 probes install:\ for the compatibility pack; without this link the
-  // game aborts with "insert the installation disc".
-  file_system_->RegisterSymbolicLink("install:", mount_path);
+  // DS2 probes install:\ for the compatibility pack: it reads and then CREATES
+  // a marker file there ("DL<hash>"). The game root device is mounted
+  // read-only, so the create fails with ACCESS_DENIED and the game shows
+  // "the compatibility pack is missing / insert the installation disc".
+  // install: gets its own writable device under Documents.
+  auto install_root = std::filesystem::absolute(ds2_ios::DocumentsPath() / "install");
+  {
+    std::error_code iec;
+    std::filesystem::create_directories(install_root, iec);
+  }
+  auto install_mount = "\\Device\\Harddisk0\\PartitionInstall";
+  auto install_device =
+      std::make_unique<rex::filesystem::HostPathDevice>(install_mount, install_root, false);
+  if (install_device->Initialize() && file_system_->RegisterDevice(std::move(install_device))) {
+    file_system_->RegisterSymbolicLink("install:", install_mount);
+  }
 #endif
   REXSYS_DEBUG("  Registered symbolic links: game:, d:");
 
