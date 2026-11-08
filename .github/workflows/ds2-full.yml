@@ -354,14 +354,12 @@ jobs:
       - name: Normalize source mtimes for incremental Xcode builds
         run: |
           # A fixed ancient timestamp: sources must look OLDER than the cached
-          # build products. The commit time would drift forward every run and
-          # defeat the whole purpose.
-          CT=946684800
+          # build products. BSD touch (macOS) has no -d; use portable -t.
           find app sdk ios_port app/generated -type f \
             \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.mm' \
                -o -name '*.m' -o -name '*.c' -o -name '*.cmake' \
                -o -name 'CMakeLists.txt' \) -print0 \
-            | xargs -0 touch -d "@$CT" 2>/dev/null || true
+            | xargs -0 touch -t 202001010000 || true
           git diff-tree --no-commit-id --name-only -r HEAD | while read -r f; do
             [ -f "$f" ] && touch "$f"
           done
