@@ -5,6 +5,7 @@
 // follows nfsmw-nx (GPL-3, docs/native-renderer.md there). This file is new code.
 
 #include "native_renderer.h"
+#include <rex/graphics/native/bcn_decode.h>
 #include <rex/graphics/native/upload_content_cache.h>
 
 #include <algorithm>
@@ -131,6 +132,10 @@ REXCVAR_DEFINE_DOUBLE(ds2_native_present_gamma, 1.0, "GPU",
 REXCVAR_DEFINE_BOOL(ds2_native_textures, true, "GPU",
                     "DS2 native renderer: load guest textures (false = a white 1x1 texture everywhere, for "
                     "checking geometry)");
+REXCVAR_DEFINE_BOOL(ds2_native_bcn_decode, true, "GPU",
+                    "DS2 native renderer: on hosts without BCn (MoltenVK on iOS has no S3TC) CPU-decode guest DXT "
+                    "textures to uncompressed texels on upload (a port of the Xenia DXT load shaders); false = "
+                    "require host BCn (compressed textures are white on such hosts)");
 REXCVAR_DEFINE_BOOL(ds2_native_gpu_profile, false, "GPU",
                     "DS2 native renderer (v54): GPU timestamps around every render pass, resolve, clear and upload; "
                     "the GPU time per frame and the most expensive pass kinds are logged with the statistics");
@@ -656,12 +661,19 @@ VkFormat ColorRtFormat(xenos::ColorRenderTargetFormat f) {
 
 struct TextureFormatInfo {
   VkFormat format;
-  uint32_t bytes_per_block;
+  uint32_t bytes_per_block;  // guest bytes per block (1-16; 8/16 for compressed formats)
   uint32_t block_size;  // texels per block side (1 or 4)
   uint32_t host_swizzle;  // XE_GPU_TEXTURE_SWIZZLE_* for components missing in the host format
+  // CPU-decoded compressed textures (hosts without BCn, MoltenVK on iOS has no S3TC): the guest
+  // blocks are decoded to uncompressed texels on upload - the same texels the classic path's DXT
+  // load shaders produce (bcn_decode.h). 0 when the host image uses the compressed format as-is.
+  uint32_t decoded_texel_bytes;
+  // Bytes in the upload buffer covering the 4x4-block footprint of one guest block: the guest
+  // block bytes uploaded as-is, or 16 decoded texels.
+  uint32_t host_block_bytes() const { return decoded_texel_bytes ? decoded_texel_bytes * 16u : bytes_per_block; }
 };
 
-bool GetTextureFormat(xenos::TextureFormat f, TextureFormatInfo& out) {
+bool GetTextureFormat(xenos::TextureFormat f, bool host_bcn, TextureFormatInfo& out) {
   using T = xenos::TextureFormat;
   switch (f) {
     case T::k_8:
@@ -698,18 +710,38 @@ bool GetTextureFormat(xenos::TextureFormat f, TextureFormatInfo& out) {
       out = {VK_FORMAT_R16G16B16A16_UNORM, 8, 1, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA};
       return true;
     case T::k_DXT1:
+      if (!host_bcn) {
+        out = {VK_FORMAT_R8G8B8A8_UNORM, 8, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA, 4};
+        return true;
+      }
       out = {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 8, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA};
       return true;
     case T::k_DXT2_3:
+      if (!host_bcn) {
+        out = {VK_FORMAT_R8G8B8A8_UNORM, 16, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA, 4};
+        return true;
+      }
       out = {VK_FORMAT_BC2_UNORM_BLOCK, 16, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA};
       return true;
     case T::k_DXT4_5:
+      if (!host_bcn) {
+        out = {VK_FORMAT_R8G8B8A8_UNORM, 16, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA, 4};
+        return true;
+      }
       out = {VK_FORMAT_BC3_UNORM_BLOCK, 16, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA};
       return true;
     case T::k_DXN:
+      if (!host_bcn) {
+        out = {VK_FORMAT_R8G8_UNORM, 16, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG, 2};
+        return true;
+      }
       out = {VK_FORMAT_BC5_UNORM_BLOCK, 16, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG};
       return true;
     case T::k_DXT5A:
+      if (!host_bcn) {
+        out = {VK_FORMAT_R8_UNORM, 8, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR, 1};
+        return true;
+      }
       out = {VK_FORMAT_BC4_UNORM_BLOCK, 8, 4, xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR};
       return true;
     default:
@@ -749,6 +781,28 @@ void SwapElements(uint8_t* data, size_t bytes, xenos::Endian endian) {
     default:
       break;
   }
+}
+
+// CPU-decodes a row-major rectangle of guest compressed blocks (already untiled and endian-swapped
+// - the same input the direct compressed upload would give to vkCmdCopyBufferToImage) into rows
+// padded to whole 4-texel blocks of uncompressed host texels (the VkBufferImageCopy extent crops
+// the padding). Returns false if the format has no CPU decoder (the destination is zeroed).
+bool DecodeBcnBlocks(xenos::TextureFormat format, uint32_t bytes_per_block, uint32_t decoded_texel_bytes,
+                     const uint8_t* src_blocks, uint32_t lbw, uint32_t lbh, uint8_t* dst) {
+  const size_t dst_row_bytes = size_t(lbw) * 4u * decoded_texel_bytes;
+  const size_t src_row_bytes = size_t(lbw) * bytes_per_block;
+  for (uint32_t by = 0; by < lbh; ++by) {
+    uint8_t* const dst_row = dst + size_t(by) * dst_row_bytes;
+    const uint8_t* const src_row = src_blocks + size_t(by) * src_row_bytes;
+    for (uint32_t bx = 0; bx < lbw; ++bx) {
+      if (!native::BcnDecodeTextureBlock(format, src_row + size_t(bx) * bytes_per_block,
+                                         dst_row + size_t(bx) * 4u * decoded_texel_bytes, dst_row_bytes)) {
+        std::memset(dst, 0, size_t(lbh) * dst_row_bytes);
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 VkComponentSwizzle SwizzleComponent(uint32_t guest_swizzle, uint32_t host_swizzle, uint32_t c) {
@@ -1007,6 +1061,8 @@ class NativeCommandProcessor final : public CommandProcessor {
   std::unordered_map<VkImage, uint32_t> msaa_heavy_this_frame_, msaa_heavy_last_frame_;
   std::unordered_map<VkImage, MsaaShadow> msaa_shadows_;
   bool msaa_supported_ = false;
+  // The device can sample BCn (S3TC) images; false = guest compressed textures are CPU-decoded.
+  bool host_bcn_ = true;
   bool msaa_lookup_ = false;  // GetRenderTarget calls of a 4x pass: no export
   bool msaa_force_clear_ = false;   // RC73: replaying a 4x clear rectangle into the 4x copies
   bool msaa_replay_clear_ = false;  // RC73: the current clear rectangle is to be replayed into the 4x copies
@@ -1172,6 +1228,8 @@ class NativeCommandProcessor final : public CommandProcessor {
   std::vector<VkWriteDescriptorSet> descriptor_writes_;
   std::vector<uint64_t> descriptor_key_;
   std::vector<uint8_t> texture_row_scratch_;
+  // Guest compressed blocks staged here before CPU decoding when the host has no BCn.
+  std::vector<uint8_t> texture_block_scratch_;
   std::vector<VkDescriptorImageInfo> draw_image_infos_;
   // RC82: additive particle draws listed in ds2_native_halfres_ps are drawn into a half-resolution copy and added to
   // the target (bonfire fog: one draw of 16 full-screen quads took 47-64 ms of GPU time).
@@ -1360,6 +1418,31 @@ bool NativeCommandProcessor::SetupContext() {
   }
   REXGPU_INFO("[native] absolute depth bias (VK_EXT_depth_bias_control, unorm24 units): {}",
               cmd_set_depth_bias2_ && REXCVAR_GET(ds2_native_depth_bias_absolute) ? "on" : "off");
+
+  // BCn (S3TC) support: on hosts that can't sample compressed textures (MoltenVK on iOS has no
+  // S3TC) the guest DXT blocks are CPU-decoded to uncompressed texels on upload (bcn_decode.h,
+  // the same texels the classic path's DXT load shaders produce). Same feature check as the
+  // classic texture cache (linearly filterable sampled images, optimal tiling).
+  host_bcn_ = true;
+  if (REXCVAR_GET(ds2_native_bcn_decode)) {
+    constexpr VkFormatFeatureFlags bcn_features =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+    const VkFormat bcn_formats[5] = {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_FORMAT_BC2_UNORM_BLOCK,
+                                     VK_FORMAT_BC3_UNORM_BLOCK, VK_FORMAT_BC4_UNORM_BLOCK,
+                                     VK_FORMAT_BC5_UNORM_BLOCK};
+    for (const VkFormat bcn_format : bcn_formats) {
+      VkFormatProperties bcn_properties = {};
+      ifn.vkGetPhysicalDeviceFormatProperties(vulkan_device_->physical_device(), bcn_format,
+                                              &bcn_properties);
+      if ((bcn_properties.optimalTilingFeatures & bcn_features) != bcn_features) {
+        host_bcn_ = false;
+        break;
+      }
+    }
+  }
+  REXGPU_INFO("[native] host BCn (S3TC): {} - compressed guest textures {}",
+              host_bcn_ ? "yes" : "no",
+              host_bcn_ ? "uploaded as-is" : "CPU-decoded on upload (ds2_native_bcn_decode)");
 
   translator_ = std::make_unique<SpirvShaderTranslator>(SpirvShaderTranslator::Features(vulkan_device_), false,
                                                         false, false, 1, 1);
@@ -3918,7 +4001,7 @@ VkImageView NativeCommandProcessor::GetTextureView(uint32_t fetch_index, xenos::
   const uint32_t height = is_1d ? 1u : fetch.size_2d.height + 1;
   if (is_1d) ++stats_.texture_1d;
   TextureFormatInfo fi;
-  const bool format_known = GetTextureFormat(fetch.format, fi);
+  const bool format_known = GetTextureFormat(fetch.format, host_bcn_, fi);
   // A resolve target at this address: sample the native image directly.
   auto rit = resolved_.find(base);
   if (rit != resolved_.end()) {
@@ -4026,18 +4109,33 @@ VkImageView NativeCommandProcessor::GetTextureView(uint32_t fetch_index, xenos::
     ++stats_.dynamic_texture_updates;
   }
   t.content_hash = content;
-  // Untile / copy every level into the upload buffer, swapping the byte order.
+  // Untile / copy every level into the upload buffer, swapping the byte order. Hosts without BCn:
+  // the untiled guest blocks are staged in a scratch buffer and then CPU-decoded into the padded
+  // whole-block rows of the upload buffer (the copy extent crops the row padding).
+  const bool decoded = fi.decoded_texel_bytes != 0;
   VkDeviceSize level_offsets[xenos::kTextureMaxMips + 1];
   VkDeviceSize total = 0;
+  size_t guest_blocks_max = size_t(bw) * bh * fi.bytes_per_block;
   for (uint32_t l = 0; l < levels; ++l) {
     const uint32_t lbw = (std::max(width >> l, 1u) + fi.block_size - 1) / fi.block_size;
     const uint32_t lbh = (std::max(height >> l, 1u) + fi.block_size - 1) / fi.block_size;
     level_offsets[l] = total;
-    total += rex::align<VkDeviceSize>(VkDeviceSize(lbw) * lbh * fi.bytes_per_block, 16);
+    total += rex::align<VkDeviceSize>(VkDeviceSize(lbw) * lbh * fi.host_block_bytes(), 16);
+    if (l) {
+      guest_blocks_max = std::max(guest_blocks_max, size_t(lbw) * lbh * fi.bytes_per_block);
+    }
   }
   VkDeviceSize offset;
   uint8_t* dst_all = Upload(total, 16, offset);
   if (!dst_all) return white_view_;
+  if (decoded && texture_block_scratch_.size() < guest_blocks_max) {
+    texture_block_scratch_.resize(guest_blocks_max);
+  }
+  // The guest block staging destination (scratch when decoding, the upload buffer directly when
+  // the compressed data is uploaded as-is).
+  auto level_dst = [&](uint32_t l) -> uint8_t* {
+    return decoded ? texture_block_scratch_.data() : dst_all + level_offsets[l];
+  };
   // One level: blocks (x + ox, y + oy) of a guest image with the given pitch (blocks for tiled, bytes per row
   // for linear), bounded by src_size bytes.
   auto copy_level = [&](uint8_t* dst, uint32_t lbw, uint32_t lbh, const uint8_t* src, size_t src_size,
@@ -4103,8 +4201,12 @@ VkImageView NativeCommandProcessor::GetTextureView(uint32_t fetch_index, xenos::
       if (row != out_row) std::memcpy(out_row, row, size_t(row_bytes));
     }
   };
-  copy_level(dst_all, bw, bh, guest, guest_size, pitch_aligned, size_t(pitch_aligned) * fi.bytes_per_block, off_x,
-             off_y);
+  copy_level(level_dst(0), bw, bh, guest, guest_size, pitch_aligned, size_t(pitch_aligned) * fi.bytes_per_block,
+             off_x, off_y);
+  if (decoded) {
+    DecodeBcnBlocks(fetch.format, fi.bytes_per_block, fi.decoded_texel_bytes, texture_block_scratch_.data(), bw, bh,
+                    dst_all);
+  }
   for (uint32_t l = 1; l < levels; ++l) {
     const uint32_t lbw = (std::max(width >> l, 1u) + fi.block_size - 1) / fi.block_size;
     const uint32_t lbh = (std::max(height >> l, 1u) + fi.block_size - 1) / fi.block_size;
@@ -4116,11 +4218,15 @@ VkImageView NativeCommandProcessor::GetTextureView(uint32_t fetch_index, xenos::
     }
     const uint32_t mo = layout.mip_offsets_bytes[stored];
     if (mo >= layout.mips_total_extent_bytes) {
-      std::memset(dst_all + level_offsets[l], 0, size_t(lbw) * lbh * fi.bytes_per_block);
+      std::memset(dst_all + level_offsets[l], 0, size_t(lbw) * lbh * fi.host_block_bytes());
       continue;
     }
-    copy_level(dst_all + level_offsets[l], lbw, lbh, guest_mips + mo, layout.mips_total_extent_bytes - mo,
+    copy_level(level_dst(l), lbw, lbh, guest_mips + mo, layout.mips_total_extent_bytes - mo,
                ll.row_pitch_bytes >> bpb_log2, ll.row_pitch_bytes, ox, oy);
+    if (decoded) {
+      DecodeBcnBlocks(fetch.format, fi.bytes_per_block, fi.decoded_texel_bytes, texture_block_scratch_.data(), lbw,
+                      lbh, dst_all + level_offsets[l]);
+    }
   }
   EndRenderPass();
   EnsureGeneral(t.image);
@@ -4181,7 +4287,7 @@ VkImageView NativeCommandProcessor::GetResolveDepthView(ResolvedEntry& entry, ui
 // v104: a 3D (volume) texture, base level only (DS2: the color grading volume of the DLC tone mapping).
 VkImageView NativeCommandProcessor::Get3DTextureView(const xenos::xe_gpu_texture_fetch_t& fetch) {
   TextureFormatInfo fi;
-  if (!GetTextureFormat(fetch.format, fi)) {
+  if (!GetTextureFormat(fetch.format, host_bcn_, fi)) {
     ++stats_.texture_unsupported;
     return VK_NULL_HANDLE;
   }
@@ -4220,16 +4326,27 @@ VkImageView NativeCommandProcessor::Get3DTextureView(const xenos::xe_gpu_texture
   const uint32_t bpb_log2 = rex::log2_floor(fi.bytes_per_block);
   const uint32_t bw = (width + fi.block_size - 1) / fi.block_size;
   const uint32_t bh = (height + fi.block_size - 1) / fi.block_size;
-  const size_t row_bytes = size_t(bw) * fi.bytes_per_block;
+  // Hosts without BCn: untile the guest blocks into a scratch buffer, then CPU-decode into the
+  // upload buffer.
+  const bool decoded = fi.decoded_texel_bytes != 0;
+  const size_t guest_row_bytes = size_t(bw) * fi.bytes_per_block;
+  const size_t row_bytes = size_t(bw) * fi.host_block_bytes();
   const VkDeviceSize total = VkDeviceSize(row_bytes) * bh * depth;
   VkDeviceSize offset;
   uint8_t* dst = Upload(total, 16, offset);
   if (!dst) return VK_NULL_HANDLE;
+  uint8_t* block_dst = dst;
+  if (decoded) {
+    if (texture_block_scratch_.size() < guest_row_bytes * size_t(bh) * depth) {
+      texture_block_scratch_.resize(guest_row_bytes * size_t(bh) * depth);
+    }
+    block_dst = texture_block_scratch_.data();
+  }
   const uint32_t pitch_blocks = layout.base.row_pitch_bytes >> bpb_log2;
   const uint32_t slice_rows = layout.base.z_slice_stride_block_rows;
   for (uint32_t z = 0; z < depth; ++z) {
     for (uint32_t y = 0; y < bh; ++y) {
-      uint8_t* row = dst + (size_t(z) * bh + y) * row_bytes;
+      uint8_t* row = block_dst + (size_t(z) * bh + y) * guest_row_bytes;
       if (fetch.tiled) {
         for (uint32_t x = 0; x < bw; ++x) {
           const int32_t o = texture_util::GetTiledOffset3D(int32_t(x), int32_t(y), int32_t(z), pitch_blocks,
@@ -4242,13 +4359,20 @@ VkImageView NativeCommandProcessor::Get3DTextureView(const xenos::xe_gpu_texture
         }
       } else {
         const size_t so = (size_t(z) * slice_rows + y) * layout.base.row_pitch_bytes;
-        if (so + row_bytes <= extent) {
-          std::memcpy(row, guest + so, row_bytes);
+        if (so + guest_row_bytes <= extent) {
+          std::memcpy(row, guest + so, guest_row_bytes);
         } else {
-          std::memset(row, 0, row_bytes);
+          std::memset(row, 0, guest_row_bytes);
         }
       }
-      SwapElements(row, row_bytes, fetch.endianness);
+      SwapElements(row, guest_row_bytes, fetch.endianness);
+    }
+  }
+  if (decoded) {
+    for (uint32_t z = 0; z < depth; ++z) {
+      DecodeBcnBlocks(fetch.format, fi.bytes_per_block, fi.decoded_texel_bytes,
+                      texture_block_scratch_.data() + size_t(z) * bh * guest_row_bytes, bw, bh,
+                      dst + size_t(z) * bh * row_bytes);
     }
   }
   EndRenderPass();
@@ -4277,7 +4401,7 @@ VkImageView NativeCommandProcessor::Get3DTextureView(const xenos::xe_gpu_texture
 
 VkImageView NativeCommandProcessor::GetCubeTextureView(const xenos::xe_gpu_texture_fetch_t& fetch) {
   TextureFormatInfo fi;
-  if (!GetTextureFormat(fetch.format, fi)) {
+  if (!GetTextureFormat(fetch.format, host_bcn_, fi)) {
     ++stats_.texture_unsupported;
     return VK_NULL_HANDLE;
   }
@@ -4355,6 +4479,14 @@ VkImageView NativeCommandProcessor::GetCubeTextureView(const xenos::xe_gpu_textu
   t.content_hash = content;
   t.resolve_signature = resolve_signature;
   const uint32_t bpb_log2 = rex::log2_floor(fi.bytes_per_block);
+  // Hosts without BCn: guest blocks are staged per face in a scratch buffer (the base level is the
+  // largest one), then CPU-decoded into the upload buffer.
+  const bool decoded = fi.decoded_texel_bytes != 0;
+  if (decoded) {
+    const size_t base_guest_blocks = size_t((width + fi.block_size - 1) / fi.block_size) *
+                                     ((height + fi.block_size - 1) / fi.block_size) * fi.bytes_per_block;
+    if (texture_block_scratch_.size() < base_guest_blocks) texture_block_scratch_.resize(base_guest_blocks);
+  }
   // Upload buffer: level-major, then face.
   VkDeviceSize face_offsets[xenos::kTextureMaxMips + 1][6];
   VkDeviceSize total = 0;
@@ -4363,7 +4495,7 @@ VkImageView NativeCommandProcessor::GetCubeTextureView(const xenos::xe_gpu_textu
     const uint32_t lbh = (std::max(height >> l, 1u) + fi.block_size - 1) / fi.block_size;
     for (uint32_t f = 0; f < 6; ++f) {
       face_offsets[l][f] = total;
-      total += rex::align<VkDeviceSize>(VkDeviceSize(lbw) * lbh * fi.bytes_per_block, 16);
+      total += rex::align<VkDeviceSize>(VkDeviceSize(lbw) * lbh * fi.host_block_bytes(), 16);
     }
   }
   VkDeviceSize offset;
@@ -4415,13 +4547,21 @@ VkImageView NativeCommandProcessor::GetCubeTextureView(const xenos::xe_gpu_textu
                                      ? layout.mips_total_extent_bytes - layout.mip_offsets_bytes[stored]
                                      : 0);
     for (uint32_t f = 0; f < 6; ++f) {
-      uint8_t* dst = dst_all + face_offsets[l][f];
+      uint8_t* const block_dst = decoded ? texture_block_scratch_.data() : dst_all + face_offsets[l][f];
       const size_t face_off = size_t(f) * ll.array_slice_stride_bytes;
       if (!level_size || face_off >= level_size) {
-        std::memset(dst, 0, size_t(lbw) * lbh * fi.bytes_per_block);
+        std::memset(block_dst, 0, size_t(lbw) * lbh * fi.bytes_per_block);
+        if (decoded) {
+          DecodeBcnBlocks(fetch.format, fi.bytes_per_block, fi.decoded_texel_bytes, block_dst, lbw, lbh,
+                          dst_all + face_offsets[l][f]);
+        }
         continue;
       }
-      copy_face(dst, lbw, lbh, level_src + face_off, level_size - face_off, ll.row_pitch_bytes, ox, oy);
+      copy_face(block_dst, lbw, lbh, level_src + face_off, level_size - face_off, ll.row_pitch_bytes, ox, oy);
+      if (decoded) {
+        DecodeBcnBlocks(fetch.format, fi.bytes_per_block, fi.decoded_texel_bytes, block_dst, lbw, lbh,
+                        dst_all + face_offsets[l][f]);
+      }
     }
   }
   EndRenderPass();
