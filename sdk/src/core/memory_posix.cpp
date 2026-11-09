@@ -14,12 +14,17 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
 #include <string>
 
 #include <fcntl.h>
+
+#if REX_PLATFORM_IOS
+#include <dirent.h>
+#endif
 
 #if REX_PLATFORM_MAC
 #include <mach/mach.h>
@@ -462,6 +467,38 @@ static std::string MakeIosBackingPath(const std::filesystem::path& path) {
   result += path.filename().string();
   return result;
 }
+
+// The iOS sandbox has no shm_open, so every launch creates a 4.5 GiB sparse
+// backing file in TMPDIR. CloseFileMappingHandle() unlinks it, but iOS normally
+// kills the process (jetsam / swipe / reboot) before ~Memory() can run, so the
+// files survive. Each one holds 60-330 MiB of committed guest pages and iOS
+// counts them as the app's "Documents & Data" (30+ launches = ~6 GB of junk).
+// Purge leftovers from previous launches before creating the new backing file.
+// unlink() is safe even if another instance still has the file open.
+static void PurgeStaleIosBackingFiles() {
+  const char* tmp = getenv("TMPDIR");
+  std::string dir = (tmp && *tmp) ? tmp : "/tmp/";
+  if (!dir.empty() && dir.back() != '/') dir += '/';
+  DIR* handle = opendir(dir.c_str());
+  if (!handle) {
+    return;
+  }
+  constexpr const char kPrefix[] = "ds2_guest_xenia_memory_";
+  int removed = 0;
+  while (dirent* entry = readdir(handle)) {
+    if (strncmp(entry->d_name, kPrefix, sizeof(kPrefix) - 1) != 0) {
+      continue;
+    }
+    if (unlink((dir + entry->d_name).c_str()) == 0) {
+      ++removed;
+    }
+  }
+  closedir(handle);
+  if (removed) {
+    ds2_ios::DebugMark(
+        ("mem: purged " + std::to_string(removed) + " stale guest backing file(s)").c_str());
+  }
+}
 #endif
 
 FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, size_t length,
@@ -472,6 +509,7 @@ FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, siz
   // object for the MAP_SHARED|MAP_FIXED guest views (MapViewsMac).
   (void)access;
   (void)commit;
+  PurgeStaleIosBackingFiles();
   std::string backing = MakeIosBackingPath(path);
   int ret = open(backing.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
   if (ret < 0) {
