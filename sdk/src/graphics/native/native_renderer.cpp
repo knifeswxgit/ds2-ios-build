@@ -5,7 +5,7 @@
 // follows nfsmw-nx (GPL-3, docs/native-renderer.md there). This file is new code.
 
 #include "native_renderer.h"
-#include <rex/graphics/native/bcn_decode.h>
+#include "bcn_decode.h"
 #include <rex/graphics/native/upload_content_cache.h>
 
 #include <algorithm>
