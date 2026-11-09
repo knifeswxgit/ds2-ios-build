@@ -82,7 +82,7 @@ ds2_native_textures_cube = true
 # iOS: a relative name resolves into Documents (the .app bundle is read-only).
 # Without this, every launch re-translates ~306 SPIR-V variants into MSL, which is
 # the main reason for the 5-10 FPS and the stutter when walking into a new area.
-ds2_shader_cache = "ds2_runtime.spvlib"
+ds2_shader_cache = ""  # learned cache currently aborts on the first variant in the classic path ("append failed"); re-enable after fix
 
 # RC65, independent, restart after a change:
 # Depth the game resolved into 8888 (shadow maps, fog/DOF/soft particles) read as depth; false = raw bytes as before.
