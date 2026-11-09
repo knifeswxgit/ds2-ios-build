@@ -68,6 +68,10 @@ class IosTouchInputDriver final : public rex::input::InputDriver {
   bool is_active_ = true;
   uint16_t vibration_[2] = {0, 0};
   void* watch_ = nullptr;  // SDL_EventWatch handle is managed by SDL_RemoveEventWatch
+  /// Reset() without locking - for OnSdlEvent, which already holds mutex_
+  /// (locking it again would deadlock: the scene-update watchdog kills the
+  /// app when it backgrounds while SDL_EVENT_DID_ENTER_BACKGROUND resets).
+  void ResetLocked();
 };
 
 }  // namespace ds2_ios

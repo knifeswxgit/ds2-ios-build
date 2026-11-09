@@ -188,7 +188,7 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
     case SDL_EVENT_GAMEPAD_REMOVED: {
       SDL_Gamepad* gp = SDL_GetGamepadFromID(e->gdevice.which);
       if (gp) SDL_CloseGamepad(gp);
-      Reset();
+      ResetLocked();  // OnSdlEvent already holds mutex_ (Reset() would deadlock on it)
       break;
     }
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
@@ -216,7 +216,7 @@ void IosTouchInputDriver::OnSdlEvent(void* raw) {
       break;
     }
     case SDL_EVENT_DID_ENTER_BACKGROUND:
-      Reset();
+      ResetLocked();  // OnSdlEvent already holds mutex_ (Reset() would deadlock on it)
       break;
     default:
       break;
@@ -309,12 +309,16 @@ X_RESULT IosTouchInputDriver::GetDeviceKeystroke(DeviceId, uint32_t, X_INPUT_KEY
   return X_ERROR_EMPTY;
 }
 
-void IosTouchInputDriver::Reset() {
-  std::lock_guard<std::mutex> lock(mutex_);
+void IosTouchInputDriver::ResetLocked() {
   state_ = Snapshot{};
   state_.changed = true;
   left_trig_finger = 0;
   right_trig_finger = 0;
+}
+
+void IosTouchInputDriver::Reset() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  ResetLocked();
 }
 
 void IosTouchInputDriver::InstallPlatformHooks() {
