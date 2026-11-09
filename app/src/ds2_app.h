@@ -46,19 +46,21 @@ class Ds2App : public rex::ReXApp {
     if (paths.game_data_root.empty()) paths.game_data_root = docs / "game_root";
     if (paths.user_data_root.empty()) paths.user_data_root = docs / "user";
     if (paths.cache_root.empty()) paths.cache_root = docs / "user" / "cache";
-    if (paths.config_path.empty()) {
-      // The config stays editable without a rebuild: Documents/ds2.toml wins
-      // and the bundled copy is only the template copied on the first launch.
-      const std::filesystem::path docs_cfg = docs / "ds2.toml";
-      const std::filesystem::path bundle_cfg = ds2_ios::BundlePath() / "ds2.toml";
-      std::error_code cec;
-      if (!std::filesystem::exists(docs_cfg, cec)) {
-        std::error_code cperr;
-        std::filesystem::copy_file(bundle_cfg, docs_cfg,
-                                   std::filesystem::copy_options::overwrite_existing, cperr);
-      }
-      paths.config_path = docs_cfg;
+    // The config stays editable without a rebuild: Documents/ds2.toml wins,
+    // the bundled copy is only the template copied on the first launch.
+    // rex_app.cpp pre-fills config_path with exe_dir/"ds2.toml", so the old
+    // "if (paths.config_path.empty())" guard NEVER fired on iOS and every cvar
+    // tweak required repacking + reinstalling the .ipa (GBox wipes the 7 GB
+    // data container on reinstall). Always prefer Documents here.
+    const std::filesystem::path docs_cfg = docs / "ds2.toml";
+    const std::filesystem::path bundle_cfg = ds2_ios::BundlePath() / "ds2.toml";
+    std::error_code cec;
+    if (!std::filesystem::exists(docs_cfg, cec)) {
+      std::error_code cperr;
+      std::filesystem::copy_file(bundle_cfg, docs_cfg,
+                                 std::filesystem::copy_options::overwrite_existing, cperr);
     }
+    paths.config_path = docs_cfg;
     ds2_ios::DebugMark("ds2_app: OnConfigurePaths applied");
     return;
 #endif

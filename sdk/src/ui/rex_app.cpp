@@ -200,11 +200,15 @@ bool ReXApp::SetupEnvironment() {
   if (REXCVAR_GET(log_verbose) && log_level_str == "info")
     log_level_str = "trace";
 #if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
-  // iOS diagnostics: the content manager traces ("[guardado] ...") are INFO
-  // while the shipped config asks for "warn" to save IO. Without them there is
-  // no way to see what the game asks for when it claims the compatibility
-  // pack is missing.
-  log_level_str = "info";
+  // Opt-in verbose diagnostics: create an empty Documents/debug_logs file to
+  // restore the INFO traces (content-manager "[guardado] ...", watchdog, IO,
+  // XMA). Forcing INFO unconditionally wrote ~170 KB/min to the flash and
+  // dumped 45 guest threads every 2 s, which is pure overhead once the DLC
+  // compatibility pack is known to work. Default honors ds2.toml ("warn").
+  std::error_code diag_ec;
+  if (std::filesystem::exists(ds2_ios::DocumentsPath() / "debug_logs", diag_ec)) {
+    log_level_str = "info";
+  }
 #endif
 
   auto category_levels = rex::ParseCategoryLevelsFromConfig(config_path_);

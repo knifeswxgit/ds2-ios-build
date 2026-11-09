@@ -78,8 +78,11 @@ ds2_native_present_gamma = 1.0
 # RC64, independent, restart after a change:
 # Cube textures (sky, material reflections/ambient); false = white as before RC64.
 ds2_native_textures_cube = true
-# Shaders translated on the console are kept in this file next to the NRO and reused on the next start; "" disables.
-ds2_shader_cache = ""  # iOS: do not grow a second cache on device
+# Shaders translated on the console are kept in this file and reused on the next start; "" disables.
+# iOS: a relative name resolves into Documents (the .app bundle is read-only).
+# Without this, every launch re-translates ~306 SPIR-V variants into MSL, which is
+# the main reason for the 5-10 FPS and the stutter when walking into a new area.
+ds2_shader_cache = "ds2_runtime.spvlib"
 
 # RC65, independent, restart after a change:
 # Depth the game resolved into 8888 (shadow maps, fog/DOF/soft particles) read as depth; false = raw bytes as before.
@@ -160,6 +163,9 @@ ds2_native_halfres_vpos_const = 215
 ds2_native_halfres_strength = 0.75
 # RC84: resolution divisor of the fog (2 = half, 4 = quarter).
 ds2_native_halfres_divisor = 2  # iOS: keep half-res bonfire fog (big GPU win)
+# Keep an unused resolved texture for this many frames. 600 frames at 10 FPS is
+# a minute of stale textures held in RAM; 150 is enough for streaming on A13.
+ds2_native_texture_keep_frames = 150  # iOS: cap the texture cache (jetsam ~2 GB)
 # RC86: textures rewritten by the game (videos) are checked every frame for a while.
 ds2_native_dynamic_textures = true
 # RC90: diagnostic probe. In every other pair of log intervals (~20 s) the picture is wrong on purpose:

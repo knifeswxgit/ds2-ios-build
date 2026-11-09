@@ -12,6 +12,10 @@
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/logging.h>
+#include <rex/platform.h>
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+#include "ds2_ios/ios_paths.h"
+#endif
 
 REXCVAR_DEFINE_STRING(ds2_shader_library, "", "GPU",
                       "Offline SPIR-V library; empty disables it. Unknown variants use the SDK translator.")
@@ -337,7 +341,14 @@ void InitLearned(LearnedCache& c, uint64_t signature) {
   const std::string path = REXCVAR_GET(ds2_shader_cache);
   if (path.empty()) return;
   std::filesystem::path full_path(path);
+#if defined(REX_PLATFORM_IOS) && REX_PLATFORM_IOS
+  // The .app bundle is read-only on iOS. Resolve a relative cache name into
+  // Documents so the runtime-learned SPIR-V cache survives restarts instead
+  // of silently failing to open and recompiling every pipeline each launch.
+  if (full_path.is_relative()) full_path = ds2_ios::DocumentsPath() / full_path;
+#else
   if (full_path.is_relative()) full_path = rex::filesystem::GetExecutableFolder() / full_path;
+#endif
   const auto start = std::chrono::steady_clock::now();
   c.opened = c.library.Open(full_path, signature, true);
   if (c.opened) {
