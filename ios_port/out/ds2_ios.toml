@@ -36,7 +36,7 @@ ds2_switch_cpu_mhz = 0  # iOS: no Horizon clock sysmodule
 ds2_switch_gpu_mhz = 0  # iOS: no Horizon clock sysmodule
 ds2_switch_mem_mhz = 0  # iOS: no Horizon clock sysmodule
 
-ds2_native_renderer = true  # verified 2026-11-09 on iPhone 11 / MoltenVK: no BC1-5 corruption, big FPS win
+ds2_native_renderer = false  # iOS/MoltenVK: BC1-5 formats unsupported in Metal; classic renderer has DXT->RGBA8 fallback. Enabling native aborts in MTLTextureDescriptor validateWithDevice on the first DXT5 (VK_FORMAT_BC3_UNORM_BLOCK) image.
 ds2_native_log_every = 0  # iOS: no per-frame native log
 ds2_native_gpu_profile = false  # iOS: no GPU profiler
 ds2_native_hitch_ms = 100
