@@ -384,6 +384,10 @@ void RecordConfiguredSpirvCache(const Shader::Translation& translation, uint64_t
   const std::array<uint64_t, 4> key = {shader.ucode_data_hash(), translation.modification(), signature,
                                        uint64_t(shader.type())};
   if (c.library.Contains(key[0], key[1], key[2], key[3]) || !c.written.insert(key).second) return;
+  // Internal depth-only fragment helpers are plain base Shader objects, not SpirvShader.
+  // They are not cacheable; ignoring them must not be treated as an I/O failure and
+  // must not disable appending for the rest of the session (classic Xenos path).
+  if (!dynamic_cast<const SpirvShader*>(&translation.shader())) return;
   // The handle may be shared with the reads of the cache: position it at the end of the valid records.
   if (c.append_offset >= 0 && fseek(c.append, c.append_offset, SEEK_SET)) {
     REXGPU_WARN("[shader cache] seek failed; appending disabled for this session");
