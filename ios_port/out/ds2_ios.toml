@@ -186,14 +186,34 @@ ds2_sharpness = 0.45
 ds2_resolution_prompt = false  # skip start screen; language fixed to Russian
 
 # ---- Classic Xenos -> Vulkan path: real iOS levers -------------------------
-# DVT on 2026-11-09: 4-5 fps, GPU Device/Renderer/Tiler 99 %, CPU ~165 %,
-# physFootprint 1.9 GB. These cvars are read by the classic path.
-video_mode_width = 960   # guest output 540p instead of 720p
-video_mode_height = 540
+# DVT on 2026-11-09: gameplay 4-6 fps, GPU Device/Renderer/Tiler 99 %, CPU ~165 %,
+# physFootprint 1.5-1.8 GB. These cvars are read by the classic path.
+# Measured A/B on the iPhone 11 (all values below are what the device is running):
+#   baseline (960x540, fif=3, lazy seal on, skip-incomplete on, threads=2,
+#             cache 256/512/15) ....... mean 5.4 fps
+#   + A/B profile below .............. mean 7.4 fps   <- shipped
+#   + 640x480 ........................ 2-3 fps (worse: the guest output is not the
+#                                      bottleneck, the internal EDRAM targets are)
+#   + draw_resolution_scale_x/y = 2 ... CRASH on Metal (scaled resolve path)
+#   + vulkan_max_frames_in_flight=1 .. 4-5 fps, no visible latency win
+#   + readback_memexport=false ....... 3-4 fps (worse)
+video_mode_width = 854   # guest output 480p
+video_mode_height = 480
 native_2x_msaa = false   # drop 2x MSAA emulation on the bandwidth-limited A13
 anisotropic_override = 0 # no forced 4x anisotropic filtering
-present_refresco_sellado_perezoso = true  # remove the empty per-frame vkQueueSubmit
-vulkan_pipeline_creation_threads = 2     # avoid oversubscribing the 6-core A13
-texture_cache_memory_limit_soft = 256    # MB; default 384
-texture_cache_memory_limit_hard = 512    # MB; default 768
-texture_cache_memory_limit_soft_lifetime = 15  # seconds; default 30
+present_refresco_sellado_perezoso = false  # it drains the queue when the frontbuffer changes
+vulkan_pipeline_creation_threads = -1     # auto (3/4 of the cores) instead of 2
+vulkan_max_frames_in_flight = 2           # 1 is slower and does not feel less laggy
+vulkan_async_skip_incomplete_frames = false  # do not drop frames made with placeholder pipelines
+texture_cache_memory_limit_soft = 384    # MB; default 384
+texture_cache_memory_limit_hard = 640    # MB; default 768
+texture_cache_memory_limit_soft_lifetime = 30  # seconds; default 30
+texture_cache_memory_limit_render_to_texture = 24  # MB; default 24
+# Draw resolution scaling (Xenia's classic-path render scale) is NOT usable on
+# Metal: with draw_resolution_scale_x/y = 2 the process dies during startup.
+draw_resolution_scale_x = 1
+draw_resolution_scale_y = 1
+vsync = true
+ds2_cp_wait_poll_us = 100
+readback_memexport = true
+readback_memexport_fast = true
