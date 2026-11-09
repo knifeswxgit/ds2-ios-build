@@ -5,7 +5,7 @@
     "sourceLinkTitle": "Репозиторий",
     "sourceLinkUrl": "https://github.com/knifeswxgit/ds2-ios-build",
     "sourceImage": "https://cdn.jsdelivr.net/gh/knifeswxgit/ds2-ios-build@main/gbox/icon.png",
-    "sourceUpdateTime": "2026-11-09T09:52:32+0000",
+    "sourceUpdateTime": "2026-11-09T10:30:22+0000",
     "sourceDescription": "Dark Souls II iOS port — свежие сборки автоматически. Установка: скачать, подписать своим Apple ID в GBox, установить. Игровые данные (game_root) и DLC заливаются отдельно; сжатый шейдер-пак больше не требуется.",
     "appCategories": [
         "Игры"
@@ -14,11 +14,11 @@
         {
             "appType": "SELF_SIGN",
             "appCateIndex": 0,
-            "appUpdateTime": "2026-11-09T09:52:32+0000",
+            "appUpdateTime": "2026-11-09T10:30:22+0000",
             "appName": "Dark Souls II",
-            "appVersion": "2026.11.09.0950",
+            "appVersion": "2026.11.09.1030",
             "appImage": "https://cdn.jsdelivr.net/gh/knifeswxgit/ds2-ios-build@main/gbox/icon.png",
-            "appPackage": "https://github.com/knifeswxgit/ds2-ios-build/releases/download/ds2-ios-latest/ds2-ios-2026.11.09.0950.ipa",
+            "appPackage": "https://github.com/knifeswxgit/ds2-ios-build/releases/download/ds2-ios-latest/ds2-ios-2026.11.09.1030.ipa",
             "appDescription": "Dark Souls II: Scholar of the First Sin — порт для iOS (arm64, MoltenVK). Классический Xenos-рендерер (нативный Vulkan-путь отключён: Metal на iOS не поддерживает BC1-5 / DXT, он падал на первом DXT5). Конфиг правится в Documents/ds2.toml без пересборки. Логи: 3 тапа по верхней центральной части экрана."
         }
     ]
